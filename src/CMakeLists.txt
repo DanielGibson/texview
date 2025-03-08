@@ -17,6 +17,17 @@ set(TV_COMPILER_IS_GCC_OR_CLANG FALSE)
 # TODO: option to link it statically
 set (sys_libs glfw)
 
+set(NFD_OVERRIDE_RECENT_WITH_DEFAULT ON)
+set(nfd_PLATFORM Undefined)
+if(WIN32)
+  set(nfd_PLATFORM PLATFORM_WIN32)
+elseif(APPLE)
+  set(nfd_PLATFORM PLATFORM_MACOS)
+elseif(UNIX AND NOT APPLE)
+  set(nfd_PLATFORM PLATFORM_LINUX)
+endif()
+add_subdirectory(libs/nfd_extended_src)
+
 if(NOT MSVC)
 	# check if this is some kind of clang (Clang, AppleClang, whatever)
 	# (convert compiler ID to lowercase so we match Clang, clang, AppleClang etc, regardless of case)
@@ -86,4 +97,4 @@ add_executable(texview ${texview_src} ${imgui_src} libs/glad/src/gl.c)
 target_include_directories(texview PRIVATE "libs/imgui")
 target_include_directories(texview PRIVATE "libs/glad/include")
 
-target_link_libraries(texview glfw ${sys_libs})
+target_link_libraries(texview glfw ${sys_libs} nfd)

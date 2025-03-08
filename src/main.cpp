@@ -7,6 +7,8 @@
 #include <GLFW/glfw3.h>
 #include <glad/gl.h>
 
+#include <nfd.h>
+
 #include <stdio.h>
 
 #include "texview.h"
@@ -87,8 +89,6 @@ static void GenericFrame(GLFWwindow* window)
 			glVertex2f(quadX+quadSize, quadY);
 		glEnd();
 	}
-
-	// TODO: direct opengl rendering
 }
 
 static void ImGuiFrame(GLFWwindow* window)
@@ -109,7 +109,20 @@ static void ImGuiFrame(GLFWwindow* window)
 
 	ImGuiWindowFlags flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
 	if(ImGui::Begin("##options", NULL, flags)) {
-		ImGui::Text("asdf");
+		if(ImGui::Button("Open File")) {
+			nfdopendialogu8args_t args = {0};
+			//args.filterList = filters;
+			//args.filterCount = 2;
+			args.defaultPath = "/tmp/"; // TODO: override recent with default hardcoden
+			nfdu8char_t* outPath = nullptr;
+			nfdresult_t result = NFD_OpenDialogU8_With(&outPath, &args);
+			if(result == NFD_OKAY) {
+				printf("Selected '%s'\n", outPath);
+			}
+			if(outPath != nullptr) {
+				NFD_FreePathU8(outPath);
+			}
+		}
 	}
 	ImGui::End();
 
@@ -125,6 +138,12 @@ int main(int argc, char** argv)
 	if (!glfwInit()) {
 		errprintf("glfwInit() failed! Exiting..\n");
 		return 1;
+	}
+
+	if (NFD_Init() != NFD_OKAY) {
+		errprintf("Couldn't initialize Native File Dialog library!\n");
+		glfwTerminate();
+		return 1; // TODO: instead start and just don't provide a file picker?
 	}
 
 	// Create window with graphics context
@@ -188,6 +207,7 @@ int main(int argc, char** argv)
 	}
 
 	glfwDestroyWindow(window);
+	NFD_Quit();
 	glfwTerminate();
 
 	return ret;
