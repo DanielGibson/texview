@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace texview {
@@ -20,7 +21,7 @@ struct Texture {
 	};
 
 	// function to free texData, set appropriately on load
-	typedef void(*TexDataFreeFun)(void* texData, void* texFreeCookie);
+	typedef void(*TexDataFreeFun)(void* texData, intptr_t texFreeCookie);
 
 	std::string name;
 	std::vector<MipLevel> mipLevels;
@@ -30,21 +31,31 @@ struct Texture {
 	// texData is freed with texDataFreeFun
 	// it's const because it should generally not be modified (might be read-only mmap)
 	const void* texData = nullptr;
-	void* texDataFreeCookie = nullptr;
+	intptr_t texDataFreeCookie = 0;
 	TexDataFreeFun texDataFreeFun = nullptr;
 
 	Texture() = default;
 	Texture(const Texture& other) = delete; // if needed we'll need reference counting or similar for texData
-	Texture(Texture&& other) = default;
+	Texture(Texture&& other) : name(std::move(other.name)), mipLevels(std::move(other.mipLevels)),
+		fileType(other.fileType), dataType(other.dataType), texData(other.texData),
+		texDataFreeCookie(other.texDataFreeCookie), texDataFreeFun(other.texDataFreeFun)
+	{
+		other.fileType = other.dataType = 0;
+		other.texData = nullptr;
+		other.texDataFreeCookie = 0;
+		other.texDataFreeFun = nullptr;
+	}
 
 	~Texture() {
 		if(texDataFreeFun != nullptr) {
 			texDataFreeFun( (void*)texData, texDataFreeCookie );
 		}
 	}
-};
 
-Texture LoadTexture(const char* filename);
+	bool Load(const char* filename);
+
+	void Clear();
+};
 
 } //namespace texview
 
