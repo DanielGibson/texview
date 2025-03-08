@@ -19,13 +19,75 @@
 
 static ImVec4 clear_color(0.45f, 0.55f, 0.60f, 1.00f);
 
+static GLuint curGlTex; // TODO: should probably support more than one eventually..
+static texview::Texture curTex;
+
 static void glfw_error_callback(int error, const char* description)
 {
 	errprintf("GLFW Error: %d - %s\n", error, description);
 }
 
+static void LoadTexture(const char* path)
+{
+	if(!curTex.Load(path)) {
+		errprintf("Couldn't load texture '%s'!\n", path);
+		return;
+	}
+
+	if(curGlTex != 0) {
+		glDeleteTextures(1, &curGlTex);
+		curGlTex = 0;
+	}
+	glGenTextures(1, &curGlTex);
+	glBindTexture(GL_TEXTURE_2D, curGlTex);
+
+	GLint internalFormat = curTex.dataType;
+
+	glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, curTex.mipLevels[0].width,
+	             curTex.mipLevels[0].height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+	             curTex.mipLevels[0].data);
+			//TextureImage[0]->sizeX, TextureImage[0]->sizeY, 0, GL_RGB, GL_UNSIGNED_BYTE, TextureImage[0]->data);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+}
+
 static void GenericFrame(GLFWwindow* window)
 {
+	int display_w, display_h;
+	glfwGetFramebufferSize(window, &display_w, &display_h);
+	glViewport(0, 0, display_w, display_h);
+	glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w,
+	             clear_color.z * clear_color.w, clear_color.w);
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	// good thing we're using a compat profile :-p
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	glOrtho(0, display_w, display_h, 0, -1, 1);
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+
+	float quadSize = display_h * 0.8f;
+	float quadX = (display_w - quadSize)*0.5f;
+	float quadY = display_h * 0.1f;
+
+	//glColor3f(0, 0, 1);
+	if(curGlTex)
+	{
+		glEnable(GL_TEXTURE_2D);
+		glBindTexture(GL_TEXTURE_2D, curGlTex);
+		glBegin(GL_QUADS);
+			glTexCoord2f(0, 0);
+			glVertex2f(quadX, quadY);
+			glTexCoord2f(0, 1);
+			glVertex2f(quadX, quadY+quadSize);
+			glTexCoord2f(1, 1);
+			glVertex2f(quadX+quadSize, quadY+quadSize);
+			glTexCoord2f(1, 0);
+			glVertex2f(quadX+quadSize, quadY);
+		glEnd();
+	}
+
 	// TODO: direct opengl rendering
 }
 
@@ -37,8 +99,19 @@ static void ImGuiFrame(GLFWwindow* window)
 	ImGui::NewFrame();
 
 	// TODO: draw windows..
-	bool show_demo_window = true;
+	static bool show_demo_window = true;
 	ImGui::ShowDemoWindow(&show_demo_window);
+
+	ImGuiIO& io = ImGui::GetIO();
+
+	ImGui::SetNextWindowPos( ImVec2(0, 0), ImGuiCond_Appearing );
+	ImGui::SetNextWindowSize(ImVec2(0, io.DisplaySize.y), ImGuiCond_Appearing);
+
+	ImGuiWindowFlags flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
+	if(ImGui::Begin("##options", NULL, flags)) {
+		ImGui::Text("asdf");
+	}
+	ImGui::End();
 
 
 	ImGui::Render();
@@ -76,6 +149,10 @@ int main(int argc, char** argv)
 	gladLoadGL(glfwGetProcAddress);
 	glfwSwapInterval(1); // Enable vsync
 
+	if(argc > 1) {
+		LoadTexture(argv[1]);
+	}
+
 	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -102,12 +179,6 @@ int main(int argc, char** argv)
 			ImGui_ImplGlfw_Sleep(32);
 			continue;
 		}
-
-		int display_w, display_h;
-		glfwGetFramebufferSize(window, &display_w, &display_h);
-		glViewport(0, 0, display_w, display_h);
-		glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
-		glClear(GL_COLOR_BUFFER_BIT);
 
 		GenericFrame(window);
 
