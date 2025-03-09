@@ -12,9 +12,13 @@ option(USE_NATIVE_FILE_DIALOG "Use 'Native File Dialog Extended' library" ON)
 
 set (CMAKE_CXX_STANDARD 14)
 
+########
+## GLFW
 
-# TODO: properly find glfw3
-# TODO: option to link it statically
+set(GLFW_BUILD_DOCS OFF)
+set(GLFW_INSTALL OFF)
+add_subdirectory(libs/glfw)
+
 set (sys_libs glfw)
 
 ##############################
