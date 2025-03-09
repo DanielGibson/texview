@@ -24,6 +24,8 @@ static ImVec4 clear_color(0.45f, 0.55f, 0.60f, 1.00f);
 static GLuint curGlTex; // TODO: should probably support more than one eventually..
 static texview::Texture curTex;
 
+static bool showImGuiDemoWindow = true;
+
 static void glfw_error_callback(int error, const char* description)
 {
 	errprintf("GLFW Error: %d - %s\n", error, description);
@@ -31,9 +33,14 @@ static void glfw_error_callback(int error, const char* description)
 
 static void LoadTexture(const char* path)
 {
-	if(!curTex.Load(path)) {
-		errprintf("Couldn't load texture '%s'!\n", path);
-		return;
+	{
+		texview::Texture newTex;
+		if(!newTex.Load(path)) {
+			errprintf("Couldn't load texture '%s'!\n", path);
+			return;
+		}
+
+		curTex = std::move(newTex);
 	}
 
 	if(curGlTex != 0) {
@@ -48,7 +55,9 @@ static void LoadTexture(const char* path)
 	glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, curTex.mipLevels[0].width,
 	             curTex.mipLevels[0].height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
 	             curTex.mipLevels[0].data);
-			//TextureImage[0]->sizeX, TextureImage[0]->sizeY, 0, GL_RGB, GL_UNSIGNED_BYTE, TextureImage[0]->data);
+
+	// TODO: additional mipmap levels?
+
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 }
@@ -99,8 +108,9 @@ static void ImGuiFrame(GLFWwindow* window)
 	ImGui::NewFrame();
 
 	// TODO: draw windows..
-	static bool show_demo_window = true;
-	ImGui::ShowDemoWindow(&show_demo_window);
+
+	if(showImGuiDemoWindow)
+		ImGui::ShowDemoWindow(&showImGuiDemoWindow);
 
 	ImGuiIO& io = ImGui::GetIO();
 
@@ -113,16 +123,18 @@ static void ImGuiFrame(GLFWwindow* window)
 			nfdopendialogu8args_t args = {0};
 			//args.filterList = filters;
 			//args.filterCount = 2;
-			args.defaultPath = "/tmp/"; // TODO: override recent with default hardcoden
+			args.defaultPath = "/tmp/";
 			nfdu8char_t* outPath = nullptr;
 			nfdresult_t result = NFD_OpenDialogU8_With(&outPath, &args);
 			if(result == NFD_OKAY) {
-				printf("Selected '%s'\n", outPath);
+				LoadTexture(outPath);
 			}
 			if(outPath != nullptr) {
 				NFD_FreePathU8(outPath);
 			}
 		}
+
+		ImGui::Checkbox("Show ImGui Demo Window", &showImGuiDemoWindow);
 	}
 	ImGui::End();
 

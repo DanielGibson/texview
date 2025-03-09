@@ -40,16 +40,30 @@ struct Texture {
 		fileType(other.fileType), dataType(other.dataType), texData(other.texData),
 		texDataFreeCookie(other.texDataFreeCookie), texDataFreeFun(other.texDataFreeFun)
 	{
-		other.fileType = other.dataType = 0;
-		other.texData = nullptr;
-		other.texDataFreeCookie = 0;
-		other.texDataFreeFun = nullptr;
+		other.Clear();
 	}
 
 	~Texture() {
 		if(texDataFreeFun != nullptr) {
 			texDataFreeFun( (void*)texData, texDataFreeCookie );
 		}
+	}
+
+	Texture& operator=(Texture&& other) {
+		Clear();
+		name = std::move(other.name);
+		mipLevels = std::move(other.mipLevels);
+		fileType = other.fileType;
+		dataType = other.dataType;
+		other.fileType = other.dataType = 0;
+		texData = other.texData;
+		other.texData = nullptr;
+		texDataFreeCookie = other.texDataFreeCookie;
+		other.texDataFreeCookie = 0;
+		texDataFreeFun = other.texDataFreeFun;
+		other.texDataFreeFun = nullptr;
+
+		return *this;
 	}
 
 	bool Load(const char* filename);
