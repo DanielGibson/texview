@@ -26,7 +26,7 @@ static ImVec4 clear_color(0.45f, 0.55f, 0.60f, 1.00f);
 static GLuint curGlTex; // TODO: should probably support more than one eventually..
 static texview::Texture curTex;
 
-static bool showImGuiDemoWindow = true;
+static bool showImGuiDemoWindow = false;
 
 static void glfw_error_callback(int error, const char* description)
 {
@@ -126,7 +126,7 @@ static void ImGuiFrame(GLFWwindow* window)
 			nfdopendialogu8args_t args = {0};
 			//args.filterList = filters;
 			//args.filterCount = 2;
-			args.defaultPath = "/tmp/";
+			//args.defaultPath = "/tmp/";
 			nfdu8char_t* outPath = nullptr;
 			nfdresult_t result = NFD_OpenDialogU8_With(&outPath, &args);
 			if(result == NFD_OKAY) {
@@ -149,7 +149,11 @@ static void ImGuiFrame(GLFWwindow* window)
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
+#ifdef _WIN32
+int my_main(int argc, char** argv) // called from WinMain() in winmain.cpp
+#else
 int main(int argc, char** argv)
+#endif
 {
 	int ret = 0;
 	glfwSetErrorCallback(glfw_error_callback);

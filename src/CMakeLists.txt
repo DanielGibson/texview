@@ -12,6 +12,8 @@ option(USE_NATIVE_FILE_DIALOG "Use 'Native File Dialog Extended' library" ON)
 
 set (CMAKE_CXX_STANDARD 14)
 
+set (TEXVIEW_BINARY "texview")
+
 ########
 ## GLFW
 
@@ -95,10 +97,17 @@ else()
 endif()
 
 set (texview_src
-	libs/stb_impl.c
 	main.cpp
 	texload.cpp
 	texview.h)
+
+if(WIN32)
+	set(texview_src ${texview_src} sys_win.cpp)
+endif()
+
+set (add_lib_src
+	libs/glad/src/gl.c
+	libs/stb_impl.c)
 
 set (imgui_src
 	libs/imgui/imgui.cpp
@@ -111,8 +120,16 @@ set (imgui_src
 	libs/imgui/backends/imgui_impl_opengl3.cpp
 	libs/imgui/backends/imgui_impl_glfw.cpp)
 
-add_executable(texview ${texview_src} ${imgui_src} libs/glad/src/gl.c)
-target_include_directories(texview PRIVATE "libs/imgui")
-target_include_directories(texview PRIVATE "libs/glad/include")
+source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} PREFIX src FILES ${texview_src} ${imgui_src} ${add_lib_src})
 
-target_link_libraries(texview ${sys_libs})
+add_executable(${TEXVIEW_BINARY} WIN32
+	${texview_src}
+	${imgui_src}
+	${add_lib_src})
+
+target_link_libraries(${TEXVIEW_BINARY} ${sys_libs})
+target_include_directories(${TEXVIEW_BINARY} PRIVATE "libs/imgui")
+target_include_directories(${TEXVIEW_BINARY} PRIVATE "libs/glad/include")
+
+# CMake >= 3.6 supports setting the default project started for debugging (instead of trying to launch ALL_BUILD ...)
+set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${TEXVIEW_BINARY})
