@@ -1,5 +1,35 @@
-// stole some code from SDL_main/SDL_RunApp() to convert argv[] to UTF-8
-// and then call a C-like main with that (my_main() from main.cpp in this case)
+
+#include "windows.h"
+
+#include "texview.h"
+
+namespace texview {
+
+MemMappedFile* LoadMemMappedFile(const char* filename)
+{
+	// TODO:
+	//- convert filename from UTF-8 to wchar
+	//- CreateFile() to open file
+	//- CreateFileMapping() to create file mapping object(?!)
+	//- MapViewOfFile() for actually mapping it
+
+
+	return nullptr;
+}
+
+void UnloadMemMappedFile(MemMappedFile* mmf)
+{
+	// TODO
+	//- UnmapViewOfFile() to unmap view
+	//- CloseHandle() to close file mapping object
+	//- CloseHandle() to close the file
+}
+
+} //namespace texview
+
+// For WinMain() I stole some code from SDL_main/SDL_RunApp() to convert
+// argv[] to UTF-8 and then call a C-like main with that (my_main() from
+// main.cpp in this case)
 // (adjusted it a bit to work without SDL, of course)
 
 /*
@@ -22,8 +52,6 @@ appreciated but is not required.
 misrepresented as being the original software.
 3. This notice may not be removed or altered from any source distribution.
 */
-
-#include "windows.h"
 
 extern int my_main(int argc, char** argv);
 

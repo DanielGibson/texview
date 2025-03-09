@@ -7,7 +7,24 @@
 #include <utility>
 #include <vector>
 
+// TODO: could have an error printing function that also shows message through ImGui (if that is running)
+#define errprintf(...) fprintf(stderr, __VA_ARGS__)
+
 namespace texview {
+
+struct MemMappedFile {
+	const void* data = nullptr;
+	size_t length = 0;
+#ifdef _WIN32
+	// TODO: whatever handles etc windows needs
+#else
+	int fd = -1;
+#endif
+};
+
+extern MemMappedFile* LoadMemMappedFile(const char* filename);
+
+extern void UnloadMemMappedFile(MemMappedFile* mmf);
 
 struct Texture {
 
@@ -35,7 +52,9 @@ struct Texture {
 	TexDataFreeFun texDataFreeFun = nullptr;
 
 	Texture() = default;
+
 	Texture(const Texture& other) = delete; // if needed we'll need reference counting or similar for texData
+
 	Texture(Texture&& other) : name(std::move(other.name)), mipLevels(std::move(other.mipLevels)),
 		fileType(other.fileType), dataType(other.dataType), texData(other.texData),
 		texDataFreeCookie(other.texDataFreeCookie), texDataFreeFun(other.texDataFreeFun)

@@ -18,9 +18,6 @@
 #include "data/texview_icon.h"
 #include "data/texview_icon32.h"
 
-// TODO: could have an error printing function that also shows message through ImGui (if that is running)
-#define errprintf(...) fprintf(stderr, __VA_ARGS__)
-
 static ImVec4 clear_color(0.45f, 0.55f, 0.60f, 1.00f);
 
 static GLuint curGlTex; // TODO: should probably support more than one eventually..

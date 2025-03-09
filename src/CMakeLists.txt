@@ -103,6 +103,8 @@ set (texview_src
 
 if(WIN32)
 	set(texview_src ${texview_src} sys_win.cpp)
+else() # the two genders: Win32 and POSIX
+	set(texview_src ${texview_src} sys_posix.cpp)
 endif()
 
 set (add_lib_src
