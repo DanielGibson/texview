@@ -8,25 +8,38 @@ if(NOT MSVC) # GCC/clang or compatible, hopefully
 	option(UBSAN	"Enable GCC/Clang Undefined Behavior Sanitizer (UBSan), implies HARDLINK_GAME" OFF)
 endif()
 
+option(USE_NATIVE_FILE_DIALOG "Use 'Native File Dialog Extended' library" ON)
+
 set (CMAKE_CXX_STANDARD 14)
 
-set(TV_COMPILER_IS_CLANG FALSE)
-set(TV_COMPILER_IS_GCC_OR_CLANG FALSE)
 
 # TODO: properly find glfw3
 # TODO: option to link it statically
 set (sys_libs glfw)
 
-set(NFD_OVERRIDE_RECENT_WITH_DEFAULT ON)
-set(nfd_PLATFORM Undefined)
-if(WIN32)
-  set(nfd_PLATFORM PLATFORM_WIN32)
-elseif(APPLE)
-  set(nfd_PLATFORM PLATFORM_MACOS)
-elseif(UNIX AND NOT APPLE)
-  set(nfd_PLATFORM PLATFORM_LINUX)
+##############################
+## Native File Dialog Extended
+
+if(USE_NATIVE_FILE_DIALOG)
+	set(NFD_OVERRIDE_RECENT_WITH_DEFAULT ON)
+	set(nfd_PLATFORM Undefined)
+	if(WIN32)
+	  set(nfd_PLATFORM PLATFORM_WIN32)
+	elseif(APPLE)
+	  set(nfd_PLATFORM PLATFORM_MACOS)
+	elseif(UNIX AND NOT APPLE)
+	  set(nfd_PLATFORM PLATFORM_LINUX)
+	endif()
+	add_subdirectory(libs/nfd_extended_src)
+	set(sys_libs ${sys_libs} nfd)
+	add_definitions(-DTV_USE_NFD)
 endif()
-add_subdirectory(libs/nfd_extended_src)
+
+#####################
+## Compiler Detection
+
+set(TV_COMPILER_IS_CLANG FALSE)
+set(TV_COMPILER_IS_GCC_OR_CLANG FALSE)
 
 if(NOT MSVC)
 	# check if this is some kind of clang (Clang, AppleClang, whatever)
@@ -97,4 +110,4 @@ add_executable(texview ${texview_src} ${imgui_src} libs/glad/src/gl.c)
 target_include_directories(texview PRIVATE "libs/imgui")
 target_include_directories(texview PRIVATE "libs/glad/include")
 
-target_link_libraries(texview glfw ${sys_libs} nfd)
+target_link_libraries(texview ${sys_libs})

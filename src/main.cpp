@@ -7,7 +7,9 @@
 #include <GLFW/glfw3.h>
 #include <glad/gl.h>
 
+#ifdef TV_USE_NFD
 #include <nfd.h>
+#endif
 
 #include <stdio.h>
 
@@ -120,6 +122,7 @@ static void ImGuiFrame(GLFWwindow* window)
 	ImGuiWindowFlags flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
 	if(ImGui::Begin("##options", NULL, flags)) {
 		if(ImGui::Button("Open File")) {
+#ifdef TV_USE_NFD
 			nfdopendialogu8args_t args = {0};
 			//args.filterList = filters;
 			//args.filterCount = 2;
@@ -132,6 +135,9 @@ static void ImGuiFrame(GLFWwindow* window)
 			if(outPath != nullptr) {
 				NFD_FreePathU8(outPath);
 			}
+#else
+			// TODO: imgui-only alternative, maybe https://github.com/aiekick/ImGuiFileDialog
+#endif
 		}
 
 		ImGui::Checkbox("Show ImGui Demo Window", &showImGuiDemoWindow);
@@ -152,11 +158,13 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
+#ifdef TV_USE_NFD
 	if (NFD_Init() != NFD_OKAY) {
 		errprintf("Couldn't initialize Native File Dialog library!\n");
 		glfwTerminate();
 		return 1; // TODO: instead start and just don't provide a file picker?
 	}
+#endif
 
 	// Create window with graphics context
 	const char* glsl_version = "#version 130";
@@ -219,7 +227,9 @@ int main(int argc, char** argv)
 	}
 
 	glfwDestroyWindow(window);
+#ifdef TV_USE_NFD
 	NFD_Quit();
+#endif
 	glfwTerminate();
 
 	return ret;
