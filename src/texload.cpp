@@ -7,6 +7,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef _WIN32
+	#define strcasecmp _stricmp
+#endif
+
 namespace texview {
 
 bool Texture::Load(const char* filename)

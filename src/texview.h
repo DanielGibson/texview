@@ -16,7 +16,10 @@ struct MemMappedFile {
 	const void* data = nullptr;
 	size_t length = 0;
 #ifdef _WIN32
-	// TODO: whatever handles etc windows needs
+	// using void* instead of HANDLE to avoid dragging in windows.h
+	// (HANDLE is just a void* anyway)
+	void* fileHandle = (void*)(intptr_t)-1; // INVALID_HANDLE
+	void* mappingObjectHandle = nullptr;
 #else
 	int fd = -1;
 #endif

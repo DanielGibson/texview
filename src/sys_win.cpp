@@ -7,22 +7,82 @@ namespace texview {
 
 MemMappedFile* LoadMemMappedFile(const char* filename)
 {
-	// TODO:
-	//- convert filename from UTF-8 to wchar
-	//- CreateFile() to open file
-	//- CreateFileMapping() to create file mapping object(?!)
-	//- MapViewOfFile() for actually mapping it
+	HANDLE fileHandle = INVALID_HANDLE_VALUE;
+	// convert filename to WCHAR and try to open the file
+	{
+		int wLen = MultiByteToWideChar(CP_UTF8, 0, filename, -1, nullptr, 0);
+		if (wLen <= 0) {
+			errprintf("Can't convert file '%s' to wchar - maybe invalid UTF-8? GetLastError(): %d\n", filename, GetLastError());
+			return nullptr;
+		}
 
+		WCHAR* wFilename = new WCHAR[wLen];
 
-	return nullptr;
+		MultiByteToWideChar(CP_UTF8, 0, filename, -1, wFilename, wLen);
+
+		fileHandle = CreateFileW(wFilename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_RANDOM_ACCESS, NULL);
+		if (fileHandle == INVALID_HANDLE_VALUE) {
+			errprintf("Couldn't open '%s'! GetLastError(): %d\n", filename, GetLastError());
+			delete[] wFilename;
+			return nullptr;
+		}
+		delete[] wFilename;
+	}
+
+	LARGE_INTEGER size = { 0 };
+	if (!GetFileSizeEx(fileHandle, &size)) {
+		errprintf("Couldn't get size of file '%s'!\n", filename);
+		CloseHandle(fileHandle);
+		return nullptr;
+	}
+	if (size.QuadPart > MAXSIZE_T) {
+		errprintf("File '%s' is too long for size_t!\n", filename);
+		CloseHandle(fileHandle);
+		return nullptr;
+	}
+
+	// create file mapping object
+	HANDLE fileMapping = CreateFileMappingW(fileHandle, NULL, PAGE_READONLY, 0, 0, NULL);
+	if (fileMapping == NULL) {
+		errprintf("Couldn't create file mapping for '%s'! GetLastError(): %d\n", filename, GetLastError());
+		CloseHandle(fileHandle);
+		return nullptr;
+	}
+
+	// map view to get pointer to data, finally
+	void* data = MapViewOfFile(fileMapping, FILE_MAP_READ, 0, 0, 0);
+	if (data == NULL) {
+		errprintf("Couldn't map a view of file '%s'! GetLastError(): %d\n", filename, GetLastError());
+		CloseHandle(fileMapping);
+		CloseHandle(fileHandle);
+		return nullptr;
+	}
+
+	MemMappedFile* ret = new MemMappedFile;
+	ret->data = data;
+	ret->length = size.QuadPart;
+	ret->fileHandle = fileHandle;
+	ret->mappingObjectHandle = fileMapping;
+
+	return ret;
 }
 
 void UnloadMemMappedFile(MemMappedFile* mmf)
 {
-	// TODO
-	//- UnmapViewOfFile() to unmap view
-	//- CloseHandle() to close file mapping object
-	//- CloseHandle() to close the file
+	if (mmf != nullptr) {
+		HANDLE fh = (HANDLE)mmf->fileHandle;
+		HANDLE moh = (HANDLE)mmf->mappingObjectHandle;
+		if (mmf->data != nullptr) {
+			UnmapViewOfFile(mmf->data);
+		}
+		if (moh != NULL) {
+			CloseHandle(moh);
+		}
+		if (fh != INVALID_HANDLE_VALUE) {
+			CloseHandle(fh);
+		}
+		delete mmf;
+	}
 }
 
 } //namespace texview
