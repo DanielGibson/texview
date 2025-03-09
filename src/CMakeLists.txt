@@ -95,6 +95,7 @@ else()
 endif()
 
 set (texview_src
+	libs/stb_impl.c
 	main.cpp
 	texload.cpp
 	texview.h)

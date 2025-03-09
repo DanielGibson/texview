@@ -1,5 +1,4 @@
 
-#define STB_IMAGE_IMPLEMENTATION
 #include "libs/stb_image.h"
 
 #include <glad/gl.h>
@@ -24,7 +23,7 @@ bool Texture::Load(const char* filename)
 		dataType = GL_RGBA8; // TODO
 
 		texData = pix;
-		texDataFreeFun = [](void* texData, intptr_t) -> void { STBI_FREE(texData); };
+		texDataFreeFun = [](void* texData, intptr_t) -> void { stbi_image_free(texData); };
 
 		mipLevels.push_back( Texture::MipLevel(w, h, pix) );
 		return true;
