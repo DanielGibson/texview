@@ -34,13 +34,22 @@ int GLAD_GL_VERSION_2_1 = 0;
 int GLAD_GL_VERSION_3_0 = 0;
 int GLAD_GL_VERSION_3_1 = 0;
 int GLAD_GL_VERSION_3_2 = 0;
+int GLAD_GL_ARB_framebuffer_sRGB = 0;
 int GLAD_GL_ARB_texture_compression_bptc = 0;
 int GLAD_GL_ARB_texture_compression_rgtc = 0;
 int GLAD_GL_ARB_texture_filter_anisotropic = 0;
+int GLAD_GL_EXT_framebuffer_sRGB = 0;
 int GLAD_GL_EXT_texture_compression_latc = 0;
 int GLAD_GL_EXT_texture_compression_rgtc = 0;
 int GLAD_GL_EXT_texture_compression_s3tc = 0;
 int GLAD_GL_EXT_texture_filter_anisotropic = 0;
+int GLAD_GL_EXT_texture_sRGB = 0;
+int GLAD_GL_EXT_texture_sRGB_R8 = 0;
+int GLAD_GL_EXT_texture_sRGB_RG8 = 0;
+int GLAD_GL_EXT_texture_sRGB_decode = 0;
+int GLAD_GL_KHR_texture_compression_astc_hdr = 0;
+int GLAD_GL_KHR_texture_compression_astc_ldr = 0;
+int GLAD_GL_KHR_texture_compression_astc_sliced_3d = 0;
 int GLAD_GL_NV_texture_compression_vtc = 0;
 
 
@@ -1510,13 +1519,22 @@ static int glad_gl_find_extensions_gl(void) {
     char **exts_i = NULL;
     if (!glad_gl_get_extensions(&exts, &exts_i)) return 0;
 
+    GLAD_GL_ARB_framebuffer_sRGB = glad_gl_has_extension(exts, exts_i, "GL_ARB_framebuffer_sRGB");
     GLAD_GL_ARB_texture_compression_bptc = glad_gl_has_extension(exts, exts_i, "GL_ARB_texture_compression_bptc");
     GLAD_GL_ARB_texture_compression_rgtc = glad_gl_has_extension(exts, exts_i, "GL_ARB_texture_compression_rgtc");
     GLAD_GL_ARB_texture_filter_anisotropic = glad_gl_has_extension(exts, exts_i, "GL_ARB_texture_filter_anisotropic");
+    GLAD_GL_EXT_framebuffer_sRGB = glad_gl_has_extension(exts, exts_i, "GL_EXT_framebuffer_sRGB");
     GLAD_GL_EXT_texture_compression_latc = glad_gl_has_extension(exts, exts_i, "GL_EXT_texture_compression_latc");
     GLAD_GL_EXT_texture_compression_rgtc = glad_gl_has_extension(exts, exts_i, "GL_EXT_texture_compression_rgtc");
     GLAD_GL_EXT_texture_compression_s3tc = glad_gl_has_extension(exts, exts_i, "GL_EXT_texture_compression_s3tc");
     GLAD_GL_EXT_texture_filter_anisotropic = glad_gl_has_extension(exts, exts_i, "GL_EXT_texture_filter_anisotropic");
+    GLAD_GL_EXT_texture_sRGB = glad_gl_has_extension(exts, exts_i, "GL_EXT_texture_sRGB");
+    GLAD_GL_EXT_texture_sRGB_R8 = glad_gl_has_extension(exts, exts_i, "GL_EXT_texture_sRGB_R8");
+    GLAD_GL_EXT_texture_sRGB_RG8 = glad_gl_has_extension(exts, exts_i, "GL_EXT_texture_sRGB_RG8");
+    GLAD_GL_EXT_texture_sRGB_decode = glad_gl_has_extension(exts, exts_i, "GL_EXT_texture_sRGB_decode");
+    GLAD_GL_KHR_texture_compression_astc_hdr = glad_gl_has_extension(exts, exts_i, "GL_KHR_texture_compression_astc_hdr");
+    GLAD_GL_KHR_texture_compression_astc_ldr = glad_gl_has_extension(exts, exts_i, "GL_KHR_texture_compression_astc_ldr");
+    GLAD_GL_KHR_texture_compression_astc_sliced_3d = glad_gl_has_extension(exts, exts_i, "GL_KHR_texture_compression_astc_sliced_3d");
     GLAD_GL_NV_texture_compression_vtc = glad_gl_has_extension(exts, exts_i, "GL_NV_texture_compression_vtc");
 
     glad_gl_free_extensions(exts_i);
