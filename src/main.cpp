@@ -124,6 +124,20 @@ static void ImGuiFrame(GLFWwindow* window)
 			//args.filterList = filters;
 			//args.filterCount = 2;
 			//args.defaultPath = "/tmp/";
+			std::string dp;
+			if(!curTex.name.empty()) {
+				dp = curTex.name;
+				size_t lastSlash = dp.find_last_of('/');
+#ifdef _WIN32
+				size_t lastBS = dp.find_last_of('\\');
+				if(lastBS != std::string::npos && lastBS > lastSlash)
+					lastSlash = lastBS;
+#endif
+				if(lastSlash != std::string::npos) {
+					dp.resize(lastSlash);
+					args.defaultPath = dp.c_str();
+				}
+			}
 			nfdu8char_t* outPath = nullptr;
 			nfdresult_t result = NFD_OpenDialogU8_With(&outPath, &args);
 			if(result == NFD_OKAY) {
