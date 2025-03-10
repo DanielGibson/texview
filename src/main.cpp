@@ -49,16 +49,31 @@ static void LoadTexture(const char* path)
 	glGenTextures(1, &curGlTex);
 	glBindTexture(GL_TEXTURE_2D, curGlTex);
 
-	GLint internalFormat = curTex.dataType;
+	GLint internalFormat = curTex.dataFormat;
+	int numMips = (int)curTex.mipLevels.size();
 
-	glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, curTex.mipLevels[0].width,
-	             curTex.mipLevels[0].height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-	             curTex.mipLevels[0].data);
+	for(int i=0; i<numMips; ++i) {
+		if(curTex.formatIsCompressed) {
+			glCompressedTexImage2D(GL_TEXTURE_2D, i, internalFormat,
+			                       curTex.mipLevels[i].width, curTex.mipLevels[i].height,
+			                       0, curTex.mipLevels[i].size, curTex.mipLevels[i].data);
+		} else {
+			glTexImage2D(GL_TEXTURE_2D, i, internalFormat, curTex.mipLevels[i].width,
+						 curTex.mipLevels[i].height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+						 curTex.mipLevels[i].data);
+		}
+	}
 
-	// TODO: additional mipmap levels?
-
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	if(numMips == 1) {
+		// TODO: setting for linear vs nearest
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	} else {
+		// TODO: setting for linear vs nearest
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, numMips - 1);
+	}
 }
 
 static void GenericFrame(GLFWwindow* window)
@@ -150,6 +165,9 @@ static void ImGuiFrame(GLFWwindow* window)
 			// TODO: imgui-only alternative, maybe https://github.com/aiekick/ImGuiFileDialog
 #endif
 		}
+
+		ImGui::Text("File: %s", curTex.name.c_str());
+		ImGui::Text("Format: %s", curTex.formatName);
 
 		ImGui::Checkbox("Show ImGui Demo Window", &showImGuiDemoWindow);
 	}

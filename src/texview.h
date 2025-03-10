@@ -35,8 +35,15 @@ struct Texture {
 		uint32_t width = 0;
 		uint32_t height = 0;
 		const void* data = nullptr; // owned by Texture
+		uint32_t size = 0;
 
 		MipLevel(uint32_t w, uint32_t h, const void* data_) : width(w), height(h), data(data_)
+		{
+			size = width * height * 4;
+		}
+
+		MipLevel(uint32_t w, uint32_t h, const void* data_, uint32_t size_)
+			: width(w), height(h), data(data_), size(size_)
 		{}
 	};
 
@@ -44,9 +51,11 @@ struct Texture {
 	typedef void(*TexDataFreeFun)(void* texData, intptr_t texFreeCookie);
 
 	std::string name;
+	const char* formatName = nullptr;
 	std::vector<MipLevel> mipLevels;
 	uint32_t fileType = 0; // TODO: some custom enum
-	uint32_t dataType = 0; // TODO: what to use here? custom enum or sth like GL_COMPRESSED_RGBA_BPTC_UNORM ?
+	uint32_t dataFormat = 0; // OpenGL internal format, like GL_COMPRESSED_RGBA_BPTC_UNORM
+	bool formatIsCompressed = false;
 
 	// texData is freed with texDataFreeFun
 	// it's const because it should generally not be modified (might be read-only mmap)
@@ -58,9 +67,11 @@ struct Texture {
 
 	Texture(const Texture& other) = delete; // if needed we'll need reference counting or similar for texData
 
-	Texture(Texture&& other) : name(std::move(other.name)), mipLevels(std::move(other.mipLevels)),
-		fileType(other.fileType), dataType(other.dataType), texData(other.texData),
-		texDataFreeCookie(other.texDataFreeCookie), texDataFreeFun(other.texDataFreeFun)
+	Texture(Texture&& other) : name(std::move(other.name)), formatName(other.formatName),
+		mipLevels(std::move(other.mipLevels)), fileType(other.fileType),
+		dataFormat(other.dataFormat), formatIsCompressed(other.formatIsCompressed),
+		texData(other.texData), texDataFreeCookie(other.texDataFreeCookie),
+		texDataFreeFun(other.texDataFreeFun)
 	{
 		other.Clear();
 	}
@@ -74,10 +85,14 @@ struct Texture {
 	Texture& operator=(Texture&& other) {
 		Clear();
 		name = std::move(other.name);
+		formatName = other.formatName;
+		other.formatName = nullptr;
 		mipLevels = std::move(other.mipLevels);
 		fileType = other.fileType;
-		dataType = other.dataType;
-		other.fileType = other.dataType = 0;
+		dataFormat = other.dataFormat;
+		other.fileType = other.dataFormat = 0;
+		formatIsCompressed = other.formatIsCompressed;
+		other.formatIsCompressed = false,
 		texData = other.texData;
 		other.texData = nullptr;
 		texDataFreeCookie = other.texDataFreeCookie;
@@ -91,6 +106,9 @@ struct Texture {
 	bool Load(const char* filename);
 
 	void Clear();
+
+private:
+	bool LoadDDS(MemMappedFile* mmf, const char* filename);
 };
 
 } //namespace texview
