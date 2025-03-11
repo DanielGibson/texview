@@ -28,11 +28,14 @@ enum pixel_format
 	PIXEL_FMT_BC4S = PIXEL_FMT_FOURCC('B', 'C', '4', 'S'), // BC4 SNORM
 
 	// Non-standard formats (some of these are supported by ATI's Compressonator)
+	// their fourcc is set in dwRGBBitCount (fourcc is that of base type)
 	PIXEL_FMT_DXT5_CCxY = PIXEL_FMT_FOURCC('C', 'C', 'x', 'Y'),
 	PIXEL_FMT_DXT5_xGxR = PIXEL_FMT_FOURCC('x', 'G', 'x', 'R'),
 	PIXEL_FMT_DXT5_xGBR = PIXEL_FMT_FOURCC('x', 'G', 'B', 'R'),
-	PIXEL_FMT_DXT5_RXGB = PIXEL_FMT_FOURCC('R', 'X', 'G', 'B'), // used for normalmaps in Doom3, same as xGBR (misnamed)
 	PIXEL_FMT_DXT5_AGBR = PIXEL_FMT_FOURCC('A', 'G', 'B', 'R'),
+	// used for normalmaps in Doom3, same as xGBR (misnamed)
+	// in this case, that fourcc is in dwFourCC
+	PIXEL_FMT_DXT5_RXGB = PIXEL_FMT_FOURCC('R', 'X', 'G', 'B'),
 
 	PIXEL_FMT_DXT1A = PIXEL_FMT_FOURCC('D', 'X', '1', 'A'), // BC1 with alpha?
 	PIXEL_FMT_ETC1 = PIXEL_FMT_FOURCC('E', 'T', 'C', '1'),

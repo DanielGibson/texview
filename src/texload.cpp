@@ -120,29 +120,39 @@ const FormatInfo comprFormatTable[] = {
 	{ PIXEL_FMT_DXT2,      0, GL_COMPRESSED_RGBA_S3TC_DXT3_EXT, BLOCK16, "DXT2 (BC2 alpha premul)", 0, 0, OF_PREMUL_ALPHA }, // but alpha premultiplied
 	{ PIXEL_FMT_DXT5,      0, GL_COMPRESSED_RGBA_S3TC_DXT5_EXT, BLOCK16, "DXT5 (BC3)" },
 	{ PIXEL_FMT_DXT4,      0, GL_COMPRESSED_RGBA_S3TC_DXT5_EXT, BLOCK16, "DXT4 (BC3 alpha premul)", 0, 0, OF_PREMUL_ALPHA }, // but alpha premultiplied
-	// unofficial derivatives of DXT1-5 - TODO: or are those put in dwRGBBitCount? (see comment in header about compressonator)
-	{ PIXEL_FMT_DXT1A,     0, GL_COMPRESSED_RGBA_S3TC_DXT1_EXT, BLOCK8,  "DXT1A (BC1 w/ alpha)" }, // probably not official
+	// unofficial DXT5 derivative (R and A chan swapped, or real A even set to 0)
+	// Doom3 checks for it 'RXGB' in fourcc and uses this (only!) for normalmaps
+	{ PIXEL_FMT_DXT5_RXGB, 0, GL_COMPRESSED_RGBA_S3TC_DXT5_EXT, BLOCK16, "DXT5 (BC3) RXGB (xGBR)" },
+
+	// other unofficial derivatives of DXT1-5 - TODO: or are those put in dwRGBBitCount? (see comment in header about compressonator)
+	// FIXME: unsure if 'DX1A' really exists/is used (except in crunch internals) - OTOH, this check doesn't hurt anyone
+	{ PIXEL_FMT_DXT1A,     0, GL_COMPRESSED_RGBA_S3TC_DXT1_EXT, BLOCK8,  "DXT1A (BC1 w/ alpha)" },
+	// FIXME: crunch checks for the following PIXEL_FMT_DXT5_* constants in desc.ddpfPixelFormat.dwRGBBitCount,
+	//        if fourcc is PIXEL_FMT_DXT4/5 (apparently compressonator puts them there)
+#if 0
 	{ PIXEL_FMT_DXT5_CCxY, 0, GL_COMPRESSED_RGBA_S3TC_DXT5_EXT, BLOCK16, "DXT5 (BC3) CCxY" },
 	{ PIXEL_FMT_DXT5_xGxR, 0, GL_COMPRESSED_RGBA_S3TC_DXT5_EXT, BLOCK16, "DXT5 (BC3) xGxR" },
 	{ PIXEL_FMT_DXT5_xGBR, 0, GL_COMPRESSED_RGBA_S3TC_DXT5_EXT, BLOCK16, "DXT5 (BC3) xGBR" },
-	{ PIXEL_FMT_DXT5_RXGB, 0, GL_COMPRESSED_RGBA_S3TC_DXT5_EXT, BLOCK16, "DXT5 (BC3) RXGB (xGBR)" },
 	{ PIXEL_FMT_DXT5_AGBR, 0, GL_COMPRESSED_RGBA_S3TC_DXT5_EXT, BLOCK16, "DXT5 (BC3) AGBR" },
+#endif
+
 	// formats based on DXT (BC4/5 aka 3Dc/+) https://en.wikipedia.org/wiki/3Dc https://aras-p.info/texts/D3D9GPUHacks.html#3dc
-	// "ATI1n" aka 3Dc+ aka BC4: 'ATI1', 'BC4U' = BC4_UNORM, 'BC4S' = BC4_SNORM
+	// - "ATI1n" aka 3Dc+ aka BC4: 'ATI1', 'BC4U' = BC4_UNORM, 'BC4S' = BC4_SNORM
 	//   => single channel 4bits/pixel, basically DXT5 alpha block. GL_COMPRESSED_RED_RGTC1
 	// TODO: could also use LATC (see below)
 	{ PIXEL_FMT_DXT5A,     0, GL_COMPRESSED_RED_RGTC1_EXT,      BLOCK8,  "ATI1n aka 3Dc+ (BC4/RGTC1)" },
 	{ PIXEL_FMT_BC4U,      0, GL_COMPRESSED_RED_RGTC1_EXT,      BLOCK8,  "BC4U (ATI1n/3Dc+/RGTC1)" },
 	{ PIXEL_FMT_BC4S,    0, GL_COMPRESSED_SIGNED_RED_RGTC1_EXT, BLOCK8,  "BC4S (ATI1n/3Dc+/RGTC1)" },
-	// "ATI2n" aka 3Dc aka BC5 (basically): 'ATI2' = BC5_UNORM, 'BC5S' = BC5_SNORM
+	// - "ATI2n" aka 3Dc aka BC5 (basically): 'ATI2' = BC5_UNORM, 'BC5S' = BC5_SNORM
 	//   'BC5U' and 'A2XY' has same channel layout as BC5, 'ATI2' has channels swapped (first Y then X)
 	//   => two channel, 8 bits per pixel, basically two DXT5 alpha blocks.
 	// TODO: could also use LATC (see below)
 	{ PIXEL_FMT_BC5U,      0, GL_COMPRESSED_RED_GREEN_RGTC2_EXT,    BLOCK16, "BC5U aka 3Dc (BC5/RGTC2 XY)" },
+	// FIXME: crunch checks for PIXEL_FMT_DXN in dwRGBBitCount, if fourcc is PIXEL_FMT_3DC
 	{ PIXEL_FMT_DXN,       0, GL_COMPRESSED_RED_GREEN_RGTC2_EXT,    BLOCK16, "ATI2n aka 3Dc (BC5/RGTC2 XY)" },
 	{ PIXEL_FMT_3DC,       0, GL_COMPRESSED_RED_GREEN_RGTC2_EXT,    BLOCK16, "ATI2n aka 3Dc (BC5/RGTC2 YX)" },
 	{ PIXEL_FMT_BC5S,  0, GL_COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT, BLOCK16, "BC5S (ATI2n/3Dc/RGTC2)" },
-	// NOTE: the GL_NV_texture_compression_vtc also exists, but it's just DXT for 3D textures
+	// NOTE: GL_NV_texture_compression_vtc also exists, but it's just DXT for 3D textures
 
 	// now the DXT1-5 and BC4/5 formats as BC1-5 from DXGI_FORMAT
 	{ DX10, DXGI_FORMAT_BC1_UNORM,      GL_COMPRESSED_RGB_S3TC_DXT1_EXT,  BLOCK8,  "BC1 (DXT1) opaque", 0, DDS_DX10MISC2_ALPHA_OPAQUE },
