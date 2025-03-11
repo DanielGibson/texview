@@ -114,6 +114,40 @@ static void GenericFrame(GLFWwindow* window)
 	}
 }
 
+
+static void OpenFilePicker() {
+#ifdef TV_USE_NFD
+		nfdopendialogu8args_t args = {0};
+		//args.filterList = filters;
+		//args.filterCount = 2;
+		std::string dp;
+		if(!curTex.name.empty()) {
+			dp = curTex.name;
+			size_t lastSlash = dp.find_last_of('/');
+	#ifdef _WIN32
+			size_t lastBS = dp.find_last_of('\\');
+			if(lastBS != std::string::npos && lastBS > lastSlash)
+				lastSlash = lastBS;
+	#endif
+			if(lastSlash != std::string::npos) {
+				dp.resize(lastSlash);
+				args.defaultPath = dp.c_str();
+			}
+		}
+		nfdu8char_t* outPath = nullptr;
+		nfdresult_t result = NFD_OpenDialogU8_With(&outPath, &args);
+		if(result == NFD_OKAY) {
+			LoadTexture(outPath);
+		}
+		if(outPath != nullptr) {
+			NFD_FreePathU8(outPath);
+		}
+#else
+		// TODO: imgui-only alternative, maybe https://github.com/aiekick/ImGuiFileDialog
+		errprintf("Built without NativeFileDialog support, have no alternative (yet)!\n");
+#endif
+}
+
 static void ImGuiFrame(GLFWwindow* window)
 {
 	// Start the Dear ImGui frame
@@ -134,36 +168,7 @@ static void ImGuiFrame(GLFWwindow* window)
 	ImGuiWindowFlags flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
 	if(ImGui::Begin("##options", NULL, flags)) {
 		if(ImGui::Button("Open File")) {
-#ifdef TV_USE_NFD
-			nfdopendialogu8args_t args = {0};
-			//args.filterList = filters;
-			//args.filterCount = 2;
-			//args.defaultPath = "/tmp/";
-			std::string dp;
-			if(!curTex.name.empty()) {
-				dp = curTex.name;
-				size_t lastSlash = dp.find_last_of('/');
-#ifdef _WIN32
-				size_t lastBS = dp.find_last_of('\\');
-				if(lastBS != std::string::npos && lastBS > lastSlash)
-					lastSlash = lastBS;
-#endif
-				if(lastSlash != std::string::npos) {
-					dp.resize(lastSlash);
-					args.defaultPath = dp.c_str();
-				}
-			}
-			nfdu8char_t* outPath = nullptr;
-			nfdresult_t result = NFD_OpenDialogU8_With(&outPath, &args);
-			if(result == NFD_OKAY) {
-				LoadTexture(outPath);
-			}
-			if(outPath != nullptr) {
-				NFD_FreePathU8(outPath);
-			}
-#else
-			// TODO: imgui-only alternative, maybe https://github.com/aiekick/ImGuiFileDialog
-#endif
+			OpenFilePicker();
 		}
 
 		ImGui::Text("File: %s", curTex.name.c_str());
