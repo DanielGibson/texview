@@ -107,6 +107,18 @@ struct Texture {
 
 	void Clear();
 
+	void GetSize(float* w, float* h){
+		float w_ = 0, h_ = 0;
+		if(mipLevels.size() > 0) {
+			w_ = mipLevels[0].width;
+			h_ = mipLevels[0].height;
+		}
+		if(w)
+			*w = w_;
+		if(h)
+			*h = h_;
+	}
+
 private:
 	bool LoadDDS(MemMappedFile* mmf, const char* filename);
 };

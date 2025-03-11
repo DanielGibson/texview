@@ -25,6 +25,16 @@ static texview::Texture curTex;
 
 static bool showImGuiDemoWindow = false;
 
+static float imGuiMenuWidth = 0.0f;
+static bool imguiMenuCollapsed = false;
+
+static double zoomLevel = 1.0;
+static double transX = 10;
+static double transY = 10;
+static bool dragging = false;
+static ImVec2 lastDragPos;
+
+
 static void glfw_error_callback(int error, const char* description)
 {
 	errprintf("GLFW Error: %d - %s\n", error, description);
@@ -59,8 +69,8 @@ static void LoadTexture(const char* path)
 			                       0, curTex.mipLevels[i].size, curTex.mipLevels[i].data);
 		} else {
 			glTexImage2D(GL_TEXTURE_2D, i, internalFormat, curTex.mipLevels[i].width,
-						 curTex.mipLevels[i].height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-						 curTex.mipLevels[i].data);
+			             curTex.mipLevels[i].height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+			             curTex.mipLevels[i].data);
 		}
 	}
 
@@ -71,7 +81,7 @@ static void LoadTexture(const char* path)
 	} else {
 		// TODO: setting for linear vs nearest
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, numMips - 1);
 	}
 }
@@ -85,18 +95,29 @@ static void GenericFrame(GLFWwindow* window)
 	             clear_color.z * clear_color.w, clear_color.w);
 	glClear(GL_COLOR_BUFFER_BIT);
 
+	float xOffs = imguiMenuCollapsed ? 0.0f : imGuiMenuWidth;
+	float winW = display_w - xOffs;
+
+	float texW, texH;
+	curTex.GetSize(&texW, &texH);
+
 	// good thing we're using a compat profile :-p
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
-	glOrtho(0, display_w, display_h, 0, -1, 1);
+	glViewport(xOffs, 0, winW, display_h);
+	glOrtho(0, winW, display_h, 0, -1, 1);
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
 
-	float quadSize = display_h * 0.8f;
-	float quadX = (display_w - quadSize)*0.5f;
-	float quadY = display_h * 0.1f;
+	float quadW = texW;
+	float quadH = texH;
 
-	//glColor3f(0, 0, 1);
+	float quadX = 0; //winW*0.1f;
+	float quadY = 0; //display_h * 0.1f;
+
+	glScaled(zoomLevel, zoomLevel, 1);
+	glTranslated(transX, transY, 0.0);
+
 	if(curGlTex)
 	{
 		glEnable(GL_TEXTURE_2D);
@@ -105,11 +126,11 @@ static void GenericFrame(GLFWwindow* window)
 			glTexCoord2f(0, 0);
 			glVertex2f(quadX, quadY);
 			glTexCoord2f(0, 1);
-			glVertex2f(quadX, quadY+quadSize);
+			glVertex2f(quadX, quadY+quadH);
 			glTexCoord2f(1, 1);
-			glVertex2f(quadX+quadSize, quadY+quadSize);
+			glVertex2f(quadX+quadW, quadY+quadH);
 			glTexCoord2f(1, 0);
-			glVertex2f(quadX+quadSize, quadY);
+			glVertex2f(quadX+quadW, quadY);
 		glEnd();
 	}
 }
@@ -155,15 +176,15 @@ static void ImGuiFrame(GLFWwindow* window)
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
 
-	// TODO: draw windows..
-
 	if(showImGuiDemoWindow)
 		ImGui::ShowDemoWindow(&showImGuiDemoWindow);
 
 	ImGuiIO& io = ImGui::GetIO();
 
 	ImGui::SetNextWindowPos( ImVec2(0, 0), ImGuiCond_Appearing );
-	ImGui::SetNextWindowSize(ImVec2(0, io.DisplaySize.y), ImGuiCond_Appearing);
+	if(!imguiMenuCollapsed) {
+		ImGui::SetNextWindowSize(ImVec2(0, io.DisplaySize.y), ImGuiCond_Always);
+	}
 
 	ImGuiWindowFlags flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
 	if(ImGui::Begin("##options", NULL, flags)) {
@@ -171,20 +192,66 @@ static void ImGuiFrame(GLFWwindow* window)
 			OpenFilePicker();
 		}
 
-		ImGui::Text("File: %s", curTex.name.c_str());
+		ImGui::TextWrapped("File: %s", curTex.name.c_str());
 		ImGui::Text("Format: %s", curTex.formatName);
+		float tw, th;
+		curTex.GetSize(&tw, &th);
+		ImGui::Text("Texture Size: %d x %d", (int)tw, (int)th);
+		ImGui::Text("MipMap Levels: %d", (int)curTex.mipLevels.size());
+		ImGui::Text("Zoomlevel: %f", zoomLevel);
 
 		ImGui::Checkbox("Show ImGui Demo Window", &showImGuiDemoWindow);
+		imGuiMenuWidth = ImGui::GetWindowWidth();
 	}
+	imguiMenuCollapsed = ImGui::IsWindowCollapsed();
 	ImGui::End();
 
+
+	// NOTE: ImGui::GetMouseDragDelta() is not very useful here, because
+	//       I only want drags that start outside of ImGui windows
+	bool mouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+	if( dragging || (mouseDown && !ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)) ) {
+		ImVec2 mousePos = ImGui::GetMousePos();
+		if(mouseDown) {
+			if(dragging) {
+				float dx = mousePos.x - lastDragPos.x;
+				float dy = mousePos.y - lastDragPos.y;
+				transX += dx / zoomLevel;
+				transY += dy / zoomLevel;
+				lastDragPos = mousePos;
+			} else {
+				lastDragPos = mousePos;
+				dragging = true;
+			}
+		} else { // left mousebutton not down (anymore) => stop dragging
+			dragging = false;
+		}
+	}
 
 	ImGui::Render();
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
+static void myGLFWscrollfun(GLFWwindow* window, double xoffset, double yoffset)
+{
+	if(yoffset > 0.0) {
+		zoomLevel *= 1.1;
+	} else if (yoffset < 0.0) {
+		zoomLevel *= (1.0/1.1);
+	}
+}
+
+static void myGLFWkeyfun(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+	if(key == GLFW_KEY_R) {
+		zoomLevel = 1.0;
+		transX = 10.0;
+		transY = 10.0;
+	}
+}
+
 #ifdef _WIN32
-int my_main(int argc, char** argv) // called from WinMain() in winmain.cpp
+int my_main(int argc, char** argv) // called from WinMain() in sys_win.cpp
 #else
 int main(int argc, char** argv)
 #endif
@@ -225,6 +292,9 @@ int main(int argc, char** argv)
 	glfwMakeContextCurrent(window);
 	gladLoadGL(glfwGetProcAddress);
 	glfwSwapInterval(1); // Enable vsync
+
+	glfwSetScrollCallback(window, myGLFWscrollfun);
+	glfwSetKeyCallback(window, myGLFWkeyfun);
 
 	if(argc > 1) {
 		LoadTexture(argv[1]);
