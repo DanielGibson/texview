@@ -45,14 +45,14 @@ static void glfw_error_callback(int error, const char* description)
 
 // mipLevel -1 = auto (let GPU choose from all levels)
 // otherwise use the given level (if it exists..)
-static void SetMipmapLevel(GLint mipLevel, bool bindTexture = true)
+static void SetMipmapLevel(GLuint tex, GLint mipLevel, bool bindTexture = true)
 {
-	GLint numMips = (GLint)curTex.mipLevels.size();
-	if(curGlTex == 0 || numMips == 1) {
+	GLint numMips = (GLint)curTex.mipLevels.size(); // TODO: pass Texture, and maybe give Texture a glTex member
+	if(tex == 0 || numMips == 1) {
 		return;
 	}
 	if(bindTexture) {
-		glBindTexture(GL_TEXTURE_2D, curGlTex);
+		glBindTexture(GL_TEXTURE_2D, tex);
 	}
 
 	mipLevel = std::min(mipLevel, numMips - 1);
@@ -126,7 +126,35 @@ static void LoadTexture(const char* path)
 			// if it's set to auto, keep it at auto, otherwise default to 0
 			mipmapLevel = 0;
 		}
-		SetMipmapLevel(mipmapLevel, false);
+		SetMipmapLevel(curGlTex, mipmapLevel, false);
+	}
+}
+
+// mipLevel -1 = "don't change mipmap settings"
+static void DrawQuad(GLuint tex, int mipLevel, ImVec2 pos, ImVec2 size, ImVec2 texCoordMax = ImVec2(1, 1), ImVec2 texCoordMin = ImVec2(0, 0))
+{
+	if(tex) {
+
+		glEnable(GL_TEXTURE_2D);
+		glBindTexture(GL_TEXTURE_2D, tex);
+
+		if(mipLevel >= 0) {
+			SetMipmapLevel(tex, mipLevel, false);
+		}
+
+		glBegin(GL_QUADS);
+			glTexCoord2f(texCoordMin.x, texCoordMin.y);
+			glVertex2f(pos.x, pos.y);
+
+			glTexCoord2f(texCoordMin.x, texCoordMax.y);
+			glVertex2f(pos.x, pos.y + size.y);
+
+			glTexCoord2f(texCoordMax.x, texCoordMax.y);
+			glVertex2f(pos.x + size.x, pos.y + size.y);
+
+			glTexCoord2f(texCoordMax.x, texCoordMin.y);
+			glVertex2f(pos.x + size.x, pos.y);
+		glEnd();
 	}
 }
 
@@ -145,9 +173,6 @@ static void GenericFrame(GLFWwindow* window)
 	float xOffs = imguiMenuCollapsed ? 0.0f : imGuiMenuWidth * sx;
 	float winW = display_w - xOffs;
 
-	float texW, texH;
-	curTex.GetSize(&texW, &texH);
-
 	// good thing we're using a compat profile :-p
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
@@ -156,30 +181,14 @@ static void GenericFrame(GLFWwindow* window)
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
 
-	float quadW = texW;
-	float quadH = texH;
-
-	float quadX = 0; //winW*0.1f;
-	float quadY = 0; //display_h * 0.1f;
-
 	glScaled(zoomLevel, zoomLevel, 1);
 	glTranslated(transX * sx, transY * sy, 0.0);
 
-	if(curGlTex)
-	{
-		glEnable(GL_TEXTURE_2D);
-		glBindTexture(GL_TEXTURE_2D, curGlTex);
-		glBegin(GL_QUADS);
-			glTexCoord2f(0, 0);
-			glVertex2f(quadX, quadY);
-			glTexCoord2f(0, 1);
-			glVertex2f(quadX, quadY+quadH);
-			glTexCoord2f(1, 1);
-			glVertex2f(quadX+quadW, quadY+quadH);
-			glTexCoord2f(1, 0);
-			glVertex2f(quadX+quadW, quadY);
-		glEnd();
-	}
+	float texW, texH;
+	curTex.GetSize(&texW, &texH);
+	int mipLevel = -1; // TODO
+	DrawQuad(curGlTex, mipLevel, ImVec2(0, 0), ImVec2(texW, texH));
+
 }
 
 
@@ -305,7 +314,7 @@ static void ImGuiFrame(GLFWwindow* window)
 			}
 			if(ImGui::SliderInt("LOD", &mipLevel, -1, maxLevel, miplevelString)) {
 				mipmapLevel = mipLevel;
-				SetMipmapLevel(mipLevel);
+				SetMipmapLevel(curGlTex, mipLevel);
 			}
 		}
 
