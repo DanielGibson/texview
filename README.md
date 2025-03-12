@@ -1,24 +1,37 @@
 # A Texture Viewer
 
-at last that's what it's supposed to become eventually..
+![](texview.png)
+
+Still very much work in progress, but at already feels like an image/texture viewer.
+
+You can drag the texture around the window (with left mouse button), zoom with the mousewheel
+and you can press your `R` key to reset the view.
+
+Contributions are welcome, but maybe ping me first so we don't accidentally implement the same thing twice :)
 
 **Goals:**
 
-* Support at least Windows and Linux (and probably similar Unix-likes), maybe Mac if someone with a Mac takes care of that.
-* Self-contained executable, using OpenGL and Dear ImGui and libglfw3
-    - Only thing left to do for that: Add ability to link glfw statically
-* Load some common image file formats (whatever stb_image supports :-p) and DDS textures containing BC1-3 or BC7 data
-    - Maybe also BC4-6, maybe also KTX, maybe obscure formats from games like Quake2
-* Show some basic info (format, encoding, size, ...)
-* Support selecting mipmap level for display
-* Zooming in/out, dragging the texture around the window
-* Support selecting linear and nearest filtering
-* Support showing all mipmap levels at once
-* Support tiled view
-    - including with different mipmap levels next to each other to see how the transitions line up
-    - ideally also a perspective view with a big plane going towards infinity to see the texture's
-      mipmapping (with different anisotropic filtering levels) in action
-* Maybe different texture files next to each other (for example to compare quality of encoders)
+- [x] Support at least Windows and Linux (and probably similar Unix-likes)
+    - [ ] maybe Mac if someone with a Mac takes care of that.
+- [x] Self-contained executable using OpenGL, [Dear ImGui](https://github.com/ocornut/imgui),
+      [GLFW3](https://www.glfw.org/), [Native File Dialog Extended](https://github.com/btzy/nativefiledialog-extended/)
+      and [stb_image.h](https://github.com/nothings/stb/blob/master/stb_image.h).  
+      All statically linked (except for OpenGL, of course) and contained in this repo.
+- [x] Load some common image file formats (whatever stb_image.h supports :-p) and DDS textures
+      containing BC1-7 or ASTC data
+    - [ ] Support more (esp. uncompressed) formats in DDS textures
+    - [ ] Maybe also KTX, maybe obscure formats from games like Quake2
+- [x] Show some basic info (format, encoding, size, ...)
+- [ ] Support selecting mipmap level for display
+- [x] Zooming in/out, dragging the texture around the window
+- [ ] Support selecting linear and nearest filtering
+- [ ] Support showing all mipmap levels at once
+- [ ] Support tiled view
+    - [ ] including with different mipmap levels next to each other to see how the transitions line up
+    - [ ] ideally also a perspective view with a big plane going towards infinity to see the texture's
+          mipmapping (with different anisotropic filtering levels) in action
+- [ ] Maybe different texture files next to each other (for example to compare quality of encoders)
+- [ ] List of textures in current directory to easily select another one
 
 **Maybe at some point:**
 
@@ -26,3 +39,31 @@ at last that's what it's supposed to become eventually..
   and moveable light and camera
     - Allow customizing shader code for that (feasible with OpenGL as it takes GLSL directly)
 * Diffing images (e.g. to show differences between source image and compressed texture)
+* Support decoding compressed formats in software so such textures can be displayed even if the GPU/driver
+  doesn't support them (e.g. ASTC currently isn't shown on NVIDIA GPUs because they only support it
+  for OpenGL ES but this tool uses Desktop OpenGL)
+
+## Building:
+
+```
+mkdir build
+cd build
+cmake ../src
+make -j8
+```
+
+or generate a VS solution and build that, or use ninja, or whatever.
+
+**Dependencies on Linux** (apart from a C++14 compiler, CMake and make or ninja):
+* For the integrated GLFW:
+    - libwayland-dev libxkbcommon-dev xorg-dev (or your distro's equivalents)
+    - see also https://www.glfw.org/docs/latest/compile.html
+* For the integrated "Native File Dialog Extended" library:  
+  Either `libgtk-3-dev` or (when passing `-DNFD_PORTAL=ON` to cmake) `libdbus-1-dev`
+    - the latter uses the `xdg-desktop-portal` protocol for the filepicker, giving you a native
+      filepicker even when using KDE (instead of always using the Gtk3 one).  
+      Needs `org.freedesktop.portal.FileChooser` interface version >= 3, which corresponds to
+      `xdg-desktop-portal` version >= 1.7.1, **at runtime**.  
+      See also https://github.com/btzy/nativefiledialog-extended/#using-xdg-desktop-portal-on-linux
+
+On **Windows** it just needs a recent Visual Studio version (I tested VS2022, but probably >= VS2015 works).
