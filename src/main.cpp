@@ -95,7 +95,10 @@ static void GenericFrame(GLFWwindow* window)
 	             clear_color.z * clear_color.w, clear_color.w);
 	glClear(GL_COLOR_BUFFER_BIT);
 
-	float xOffs = imguiMenuCollapsed ? 0.0f : imGuiMenuWidth;
+	float sx, sy;
+	glfwGetWindowContentScale(window, &sx, &sy);
+
+	float xOffs = imguiMenuCollapsed ? 0.0f : imGuiMenuWidth * sx;
 	float winW = display_w - xOffs;
 
 	float texW, texH;
@@ -116,7 +119,7 @@ static void GenericFrame(GLFWwindow* window)
 	float quadY = 0; //display_h * 0.1f;
 
 	glScaled(zoomLevel, zoomLevel, 1);
-	glTranslated(transX, transY, 0.0);
+	glTranslated(transX * sx, transY * sy, 0.0);
 
 	if(curGlTex)
 	{
