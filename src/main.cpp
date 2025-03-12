@@ -11,6 +11,7 @@
 #include <nfd.h>
 #endif
 
+#include <math.h>
 #include <stdio.h>
 
 #include "texview.h"
@@ -150,8 +151,11 @@ static void OpenFilePicker() {
 			size_t lastSlash = dp.find_last_of('/');
 	#ifdef _WIN32
 			size_t lastBS = dp.find_last_of('\\');
-			if(lastBS != std::string::npos && lastBS > lastSlash)
+			if( (lastBS != std::string::npos && lastBS > lastSlash)
+			   || lastSlash == std::string::npos )
+			{
 				lastSlash = lastBS;
+			}
 	#endif
 			if(lastSlash != std::string::npos) {
 				dp.resize(lastSlash);
@@ -194,14 +198,42 @@ static void ImGuiFrame(GLFWwindow* window)
 		if(ImGui::Button("Open File")) {
 			OpenFilePicker();
 		}
-
+		static float fontWrapWidth = 64.0f;
+		ImGui::PushTextWrapPos(fontWrapWidth);
 		ImGui::TextWrapped("File: %s", curTex.name.c_str());
 		ImGui::Text("Format: %s", curTex.formatName);
 		float tw, th;
 		curTex.GetSize(&tw, &th);
 		ImGui::Text("Texture Size: %d x %d", (int)tw, (int)th);
 		ImGui::Text("MipMap Levels: %d", (int)curTex.mipLevels.size());
-		ImGui::Text("Zoomlevel: %f", zoomLevel);
+		float zl = zoomLevel;
+		if(ImGui::SliderFloat("Zoom", &zl, 0.0125, 50.0f, "%.3f", ImGuiSliderFlags_Logarithmic)) {
+			zoomLevel = zl;
+		}
+		if(ImGui::Button("Fit to Window")) {
+			int display_w, display_h;
+			glfwGetFramebufferSize(window, &display_w, &display_h);
+			double winW = display_w - imGuiMenuWidth;
+			double zw = winW / tw;
+			double zh = display_h / th;
+			if(zw < zh) {
+				zoomLevel = zw;
+				transX = 0;
+				transY = floor(0.5 * (display_h/zw - th));
+			} else {
+				zoomLevel = zh;
+				transX = floor(0.5 * (winW/zh - tw));
+				transY = 0;
+			}
+		}
+		ImGui::SameLine();
+		if(ImGui::Button("Reset Zoom")) {
+			zoomLevel = 1.0;
+		}
+		fontWrapWidth = ImGui::GetItemRectMax().x;
+		if(ImGui::Button("Reset Position")) {
+			transX = transY = 10.0;
+		}
 
 		ImGui::Checkbox("Show ImGui Demo Window", &showImGuiDemoWindow);
 		imGuiMenuWidth = ImGui::GetWindowWidth();
@@ -213,7 +245,7 @@ static void ImGuiFrame(GLFWwindow* window)
 	// NOTE: ImGui::GetMouseDragDelta() is not very useful here, because
 	//       I only want drags that start outside of ImGui windows
 	bool mouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
-	if( dragging || (mouseDown && !ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)) ) {
+	if( dragging || (mouseDown && !ImGui::GetIO().WantCaptureMouse) ) {
 		ImVec2 mousePos = ImGui::GetMousePos();
 		if(mouseDown) {
 			if(dragging) {
@@ -235,17 +267,66 @@ static void ImGuiFrame(GLFWwindow* window)
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
+static double CalcZoomLevel(double zl, bool increase)
+{
+	if(increase) {
+		if(zl >= 2.0)
+			zl += 0.5;
+		else if(zl >= 1.0)
+			zl += 0.25;
+		else if (zl >= 0.125)
+			zl += 0.125;
+		else
+			zl *= sqrt(2.0);
+	} else {
+		if(zl <= 0.125)
+			zl *= 1.0/sqrt(2.0);
+		else if(zl <= 1.0)
+			zl -= 0.125;
+		else if(zl <= 2.0)
+			zl -= 0.25;
+		else
+			zl -= 0.5;
+	}
+
+	if(zl >= 1.0) {
+		double nearestHalf = round(zl*2.0)*0.5;
+		if(fabs(nearestHalf - zl) <= std::min(0.25, 0.1 * zl)) {
+			return nearestHalf;
+		}
+	} else if(zl > 0.25) {
+		double nearestEighth = round(zl*8.0)*0.125;
+		if(fabs(nearestEighth - zl) <= 0.05) {
+			return nearestEighth;
+		}
+	}
+	return zl;
+}
+
 static void myGLFWscrollfun(GLFWwindow* window, double xoffset, double yoffset)
 {
-	if(yoffset > 0.0) {
-		zoomLevel *= 1.1;
-	} else if (yoffset < 0.0) {
-		zoomLevel *= (1.0/1.1);
+	// ImGui_ImplSDL2_ProcessEvent() doc says:
+	//   You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
+	//   - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
+	//   - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy of the keyboard data.
+	//   Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
+	if(yoffset == 0 || ImGui::GetIO().WantCaptureMouse) {
+		return;
 	}
+
+	zoomLevel = CalcZoomLevel(zoomLevel, yoffset > 0.0);
 }
 
 static void myGLFWkeyfun(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
+	// while io.WantCaptureKeyboard doesn't work well (it returns true if an
+	// ImGui window has focus, even if no text input is active), this seems to
+	// do exactly what I want (i.e. let me ignore keys only if one is currently
+	// typing text into some ImGui widget)
+	if(ImGui::GetIO().WantTextInput) {
+		return;
+	}
+
 	if(key == GLFW_KEY_R) {
 		zoomLevel = 1.0;
 		transX = 10.0;
