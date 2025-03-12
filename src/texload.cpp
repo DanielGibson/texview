@@ -192,6 +192,49 @@ const FormatInfo comprFormatTable[] = {
 
 };
 
+struct ASTCInfo {
+	int dxgiFormat;
+	uint32_t glFormat;
+	// ASTC 12x10 has blockW 12 and blockH 10
+	uint8_t blockW;
+	uint8_t blockH;
+	uint8_t ourFlags; // OF_SRGB, OF_TYPELESS
+	const char* name;
+};
+
+#define ASTC_SIZES  \
+	ASTC_SIZE(4, 4)   \
+	ASTC_SIZE(5, 4)   \
+	ASTC_SIZE(5, 5)   \
+	ASTC_SIZE(6, 5)   \
+	ASTC_SIZE(6, 6)   \
+	ASTC_SIZE(8, 5)   \
+	ASTC_SIZE(8, 6)   \
+	ASTC_SIZE(8, 8)   \
+	ASTC_SIZE(10, 5)  \
+	ASTC_SIZE(10, 6)  \
+	ASTC_SIZE(10, 8)  \
+	ASTC_SIZE(10, 10) \
+	ASTC_SIZE(12, 10) \
+	ASTC_SIZE(12, 12)
+
+const ASTCInfo astcFormatTable[] = {
+
+#define ASTC_SIZE(W, H) \
+	{ DXGI_FORMAT_ASTC_ ## W ## X ## H ## _TYPELESS, GL_COMPRESSED_RGBA_ASTC_ ## W ## x ## H ## _KHR, \
+		W, H, OF_TYPELESS, "ASTC " #W "x" #H " typeless" }, \
+	{ DXGI_FORMAT_ASTC_ ## W ## X ## H ## _UNORM, GL_COMPRESSED_RGBA_ASTC_ ## W ## x ## H ## _KHR, \
+		W, H, 0, "ASTC " #W "x" #H " UNORM" }, \
+	{ DXGI_FORMAT_ASTC_ ## W ## X ## H ## _UNORM_SRGB, GL_COMPRESSED_SRGB8_ALPHA8_ASTC_ ## W ## x ## H ## _KHR, \
+		W, H, OF_SRGB, "ASTC " #W "x" #H " UNORM SRGB" },
+
+	// expand all ASTC_SIZE() entries in the ASTC_SIZES table
+	// with the ASTC_SIZE(W, H) definition from the previous lines
+	ASTC_SIZES
+
+#undef ASTC_SIZE
+};
+
 const FormatInfo unComprFormatTable[] = {
 	// TODO fourcc: PIXEL_FMT_R8G8B8, PIXEL_FMT_L8, PIXEL_FMT_A8, PIXEL_FMT_A8L8, PIXEL_FMT_A8R8G8B8
 	// TODO fourcc DX10 with all those formats.. https://learn.microsoft.com/en-us/windows/win32/api/dxgiformat/ne-dxgiformat-dxgi_format
@@ -261,6 +304,25 @@ static uint32_t CalcSize(uint32_t w, uint32_t h, int32_t pitchTypeOrBitsPPixel)
 	return size;
 }
 
+static ASTCInfo FindASTCFormat(int dxgiFmt)
+{
+	ASTCInfo ret = {};
+	for(const ASTCInfo& ai : astcFormatTable) {
+		if(ai.dxgiFormat == dxgiFmt) {
+			ret = ai;
+			break;
+		}
+	}
+	return ret;
+}
+
+static uint32_t CalcASTCmipSize(uint32_t w, uint32_t h, uint32_t blockW, uint32_t blockH)
+{
+	// "ASTC textures are compressed using a fixed block size of 128 bits [16 bytes],
+	//  but with a variable block footprint ranging from 4×4 texels up to 12×12 texels."
+	return std::max(1u, (w+blockW-1)/blockW) * std::max(1u, (h+blockH-1)/blockH) * 16;
+}
+
 bool Texture::LoadDDS(MemMappedFile* mmf, const char* filename)
 {
 	const unsigned char* data = (const unsigned char*)mmf->data;
@@ -302,21 +364,37 @@ bool Texture::LoadDDS(MemMappedFile* mmf, const char* filename)
 	// maybe I could even do the same for the uncompressed dxgi formats, if I build a table with masks etc for them?
 	// would need sample-data though, to make sure I get the byte order right..
 	// maybe helpful generally: https://registry.khronos.org/KTX/specs/2.0/ktxspec.v2.html#formatMapping
-
-	FormatInfo fmtInfo = FindFormat(fourcc, dxgiFmt, header->ddpfPixelFormat.dwFlags, dx10misc2);
-
-	if(fmtInfo.glFormat == 0) {
-		char fccstr[5] = { char(fourcc & 0xff), char((fourcc >> 8) & 0xff),
-		                   char((fourcc >> 16) & 0xff), char((fourcc >> 24) & 0xff), 0 };
-		errprintf( "Couldn't detect data format of '%s' - FourCC: 0x%x ('%s') dxgiFmt: %d\n", filename, fourcc, fccstr, dxgiFmt );
-		return false;
+	FormatInfo fmtInfo = {};
+	ASTCInfo astcInfo = {};
+	bool isASTC = false;
+	if(fourcc == DX10fourcc && (unsigned)dxgiFmt >= DXGI_FORMAT_ASTC_4X4_TYPELESS
+	                        && (unsigned)dxgiFmt <= DXGI_FORMAT_ASTC_12X12_UNORM_SRGB)
+	{
+		astcInfo = FindASTCFormat(dxgiFmt);
+		if(astcInfo.glFormat == 0) {
+			errprintf("Couldn't detect data format of '%s' - it's dxgiFormat (%d) is in the ASTC-range, but apparently didn't match any actual format\n",
+			          filename, dxgiFmt);
+			return false;
+		}
+		isASTC = true;
+		dataFormat = astcInfo.glFormat;
+		formatName = astcInfo.name;
+		formatIsCompressed = true;
+	} else {
+		fmtInfo = FindFormat(fourcc, dxgiFmt, header->ddpfPixelFormat.dwFlags, dx10misc2);
+		if(fmtInfo.glFormat == 0) {
+			char fccstr[5] = { char(fourcc & 0xff), char((fourcc >> 8) & 0xff),
+			                   char((fourcc >> 16) & 0xff), char((fourcc >> 24) & 0xff), 0 };
+			errprintf( "Couldn't detect data format of '%s' - FourCC: 0x%x ('%s') dxgiFormat: %d\n", filename, fourcc, fccstr, dxgiFmt );
+			return false;
+		}
+		dataFormat = fmtInfo.glFormat;
+		formatName = fmtInfo.name;
+		formatIsCompressed = (fmtInfo.ourFlags & OF_COMPRESSED) != 0;
 	}
 
 	name = filename;
 	fileType = 0; // TODO
-	dataFormat = fmtInfo.glFormat;
-	formatName = fmtInfo.name;
-	formatIsCompressed = (fmtInfo.ourFlags & OF_COMPRESSED) != 0;
 	texData = mmf;
 	texDataFreeFun = [](void* texData, intptr_t) -> void { UnloadMemMappedFile( (MemMappedFile*)texData ); };
 
@@ -324,7 +402,12 @@ bool Texture::LoadDDS(MemMappedFile* mmf, const char* filename)
 	int mipH = h;
 	const unsigned char* dataCur = data + dataOffset;
 	for(int i=0; i<numMips; ++i) {
-		uint32_t mipSize = CalcSize(mipW, mipH, fmtInfo.pitchTypeOrBitsPPixel);
+		uint32_t mipSize;
+		if(!isASTC) {
+			mipSize = CalcSize(mipW, mipH, fmtInfo.pitchTypeOrBitsPPixel);
+		} else {
+			mipSize = CalcASTCmipSize(mipW, mipH, astcInfo.blockW, astcInfo.blockH);
+		}
 		const unsigned char* dataNext = dataCur + mipSize;
 		if(dataNext > dataEnd) {
 			errprintf("MipMap level %d for '%s' is incomplete (file too small) mipSize: %d w: %d h: %d!\n",
