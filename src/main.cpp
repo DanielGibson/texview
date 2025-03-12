@@ -311,7 +311,15 @@ int main(int argc, char** argv)
 
 	// Setup Dear ImGui style
 	ImGui::StyleColorsDark();
-	//ImGui::StyleColorsLight();
+	// make it look a bit nicer with rounded edges
+	ImGuiStyle& style = ImGui::GetStyle();
+	style.WindowRounding = 2.0f;
+	style.FrameRounding = 3.0f;
+	style.FramePadding = ImVec2( 6.0f, 3.0f );
+	//style.ChildRounding = 6.0f;
+	style.ScrollbarRounding = 8.0f;
+	style.GrabRounding = 3.0f;
+	style.PopupRounding = 2.0f;
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
