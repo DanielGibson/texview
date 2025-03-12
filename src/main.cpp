@@ -35,10 +35,55 @@ static double transY = 10;
 static bool dragging = false;
 static ImVec2 lastDragPos;
 
+static bool linearFilter = false;
+static int mipmapLevel = -1; // -1: auto, otherwise enforce that level
 
 static void glfw_error_callback(int error, const char* description)
 {
 	errprintf("GLFW Error: %d - %s\n", error, description);
+}
+
+// mipLevel -1 = auto (let GPU choose from all levels)
+// otherwise use the given level (if it exists..)
+static void SetMipmapLevel(GLint mipLevel, bool bindTexture = true)
+{
+	GLint numMips = (GLint)curTex.mipLevels.size();
+	if(curGlTex == 0 || numMips == 1) {
+		return;
+	}
+	if(bindTexture) {
+		glBindTexture(GL_TEXTURE_2D, curGlTex);
+	}
+
+	mipLevel = std::min(mipLevel, numMips - 1);
+	// setting both to the same level enforces using that level
+	GLint baseLevel = mipLevel;
+	GLint maxLevel  = mipLevel;
+	if(mipLevel < 0) { // auto mode
+		baseLevel = 0;
+		maxLevel = numMips - 1;
+	}
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, baseLevel);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, maxLevel);
+}
+
+static void UpdateTextureFilter(bool bindTex = true)
+{
+	if(curGlTex == 0) {
+		return;
+	}
+	if(bindTex) {
+		glBindTexture(GL_TEXTURE_2D, curGlTex);
+	}
+	GLint filter = linearFilter ? GL_LINEAR : GL_NEAREST;
+	if(curTex.mipLevels.size() == 1) {
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+	} else {
+		GLint mipFilter = linearFilter ? GL_LINEAR_MIPMAP_LINEAR : GL_NEAREST_MIPMAP_NEAREST;
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, mipFilter);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+	}
 }
 
 static void LoadTexture(const char* path)
@@ -75,15 +120,13 @@ static void LoadTexture(const char* path)
 		}
 	}
 
-	if(numMips == 1) {
-		// TODO: setting for linear vs nearest
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	} else {
-		// TODO: setting for linear vs nearest
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, numMips - 1);
+	UpdateTextureFilter(false);
+	if(numMips > 1) {
+		if(mipmapLevel != -1) {
+			// if it's set to auto, keep it at auto, otherwise default to 0
+			mipmapLevel = 0;
+		}
+		SetMipmapLevel(mipmapLevel, false);
 	}
 }
 
@@ -233,6 +276,34 @@ static void ImGuiFrame(GLFWwindow* window)
 		fontWrapWidth = ImGui::GetItemRectMax().x;
 		if(ImGui::Button("Reset Position")) {
 			transX = transY = 10.0;
+		}
+
+		int texFilter = linearFilter;
+		if ( ImGui::Combo( "Texture filter", &texFilter, "Nearest\0Linear\0" ) ) {
+			if(texFilter != (int)linearFilter) {
+				linearFilter = texFilter != 0;
+				UpdateTextureFilter();
+			}
+		}
+		int mipLevel = mipmapLevel;
+		int maxLevel = std::max(0, int(curTex.mipLevels.size()) - 1);
+		if(maxLevel == 0) {
+			ImGui::BeginDisabled(true);
+			ImGui::SliderInt("Mip Map Level", &mipLevel, 0, 1, "0 (Texture has no Mip Maps)");
+			ImGui::EndDisabled();
+		} else {
+			const char* miplevelString = "Auto (normal mip mapping)";
+			char miplevelStrBuf[64] = {};
+			if(mipLevel >= 0) {
+				mipLevel = std::min(mipLevel, maxLevel);
+				miplevelString = miplevelStrBuf;
+				snprintf(miplevelStrBuf, sizeof(miplevelStrBuf), "%d (%dx%d)", mipLevel,
+						 curTex.mipLevels[mipLevel].width, curTex.mipLevels[mipLevel].height);
+			}
+			if(ImGui::SliderInt("Mip Map Level", &mipLevel, -1, maxLevel, miplevelString)) {
+				mipmapLevel = mipLevel;
+				SetMipmapLevel(mipLevel);
+			}
 		}
 
 		ImGui::Checkbox("Show ImGui Demo Window", &showImGuiDemoWindow);

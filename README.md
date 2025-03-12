@@ -23,10 +23,10 @@ Contributions are welcome, but maybe ping me first so we don't accidentally impl
     - [ ] Maybe also KTX, maybe obscure formats from games like Quake2
 - [x] Show some basic info (format, encoding, size, ...)
 - [ ] Implement filters for filepicker so it only shows supported formats
-- [ ] Support selecting mipmap level for display
+- [x] Support selecting mipmap level for display
 - [ ] Show errors/warnings with ImGui instead of only printing to stderr
 - [x] Zooming in/out, dragging the texture around the window
-- [ ] Support selecting linear and nearest filtering
+- [x] Support selecting linear and nearest filtering
 - [ ] Support showing all mipmap levels at once
     - [ ] in a spiral-ish compact form, in a column, in a row
     - [ ] at their relative sizes OR all in the same size (there the spiral probably should be a grid)
