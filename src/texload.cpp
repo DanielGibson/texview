@@ -372,7 +372,7 @@ bool Texture::LoadDDS(MemMappedFile* mmf, const char* filename)
 	{
 		astcInfo = FindASTCFormat(dxgiFmt);
 		if(astcInfo.glFormat == 0) {
-			errprintf("Couldn't detect data format of '%s' - it's dxgiFormat (%d) is in the ASTC-range, but apparently didn't match any actual format\n",
+			errprintf("Couldn't detect data format of '%s' - its dxgiFormat (%d) is in the ASTC-range, but apparently didn't match any actual format\n",
 			          filename, dxgiFmt);
 			return false;
 		}

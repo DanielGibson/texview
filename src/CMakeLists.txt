@@ -8,7 +8,8 @@ if(NOT MSVC) # GCC/clang or compatible, hopefully
 	option(UBSAN	"Enable GCC/Clang Undefined Behavior Sanitizer (UBSan), implies HARDLINK_GAME" OFF)
 endif()
 
-option(USE_NATIVE_FILE_DIALOG "Use 'Native File Dialog Extended' library" ON)
+#option(USE_NATIVE_FILE_DIALOG "Use 'Native File Dialog Extended' library" ON)
+set(USE_NATIVE_FILE_DIALOG ON) # currently no alternative is implemented
 
 set (CMAKE_CXX_STANDARD 14)
 
@@ -69,9 +70,9 @@ if(TV_COMPILER_IS_GCC_OR_CLANG)
 
 	if(FORCE_COLORED_OUTPUT)
 		if(CMAKE_COMPILER_IS_GNUCC)
-		   add_compile_options (-fdiagnostics-color=always)
+			add_compile_options (-fdiagnostics-color=always)
 		elseif (TV_COMPILER_IS_CLANG)
-		   add_compile_options (-fcolor-diagnostics)
+			add_compile_options (-fcolor-diagnostics)
 		endif ()
 	endif ()
 

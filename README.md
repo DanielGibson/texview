@@ -22,16 +22,26 @@ Contributions are welcome, but maybe ping me first so we don't accidentally impl
     - [ ] Support more (esp. uncompressed) formats in DDS textures
     - [ ] Maybe also KTX, maybe obscure formats from games like Quake2
 - [x] Show some basic info (format, encoding, size, ...)
+- [ ] Implement filters for filepicker so it only shows supported formats
 - [ ] Support selecting mipmap level for display
+- [ ] Show errors/warnings with ImGui instead of only printing to stderr
 - [x] Zooming in/out, dragging the texture around the window
 - [ ] Support selecting linear and nearest filtering
 - [ ] Support showing all mipmap levels at once
+    - [ ] in a spiral-ish compact form, in a column, in a row
+    - [ ] at their relative sizes OR all in the same size (there the spiral probably should be a grid)
 - [ ] Support tiled view
     - [ ] including with different mipmap levels next to each other to see how the transitions line up
     - [ ] ideally also a perspective view with a big plane going towards infinity to see the texture's
           mipmapping (with different anisotropic filtering levels) in action
+- [ ] Let user set swizzling of color channels (and maybe swizzle automatically for known swizzled formats like "RXGB" DXT5)
+    - will have to start using shaders for this.. I hope I can still continue using legacy GL then :-p
 - [ ] Maybe different texture files next to each other (for example to compare quality of encoders)
 - [ ] List of textures in current directory to easily select another one
+    - [ ] If one can also navigate to `..` and subdirectories here, it could even be a full alternative to the filepicker
+    - [ ] ... and it could be used to navigate archives like ZIP (that are currently not supported at all).  
+          But that's more in the "maybe at some point" category
+- [ ] Support more than just 2D textures (cubemaps, texture arrays, 3D textures, 1D textures?)
 
 **Maybe at some point:**
 
