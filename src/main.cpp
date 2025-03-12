@@ -249,6 +249,8 @@ static void ImGuiFrame(GLFWwindow* window)
 		curTex.GetSize(&tw, &th);
 		ImGui::Text("Texture Size: %d x %d", (int)tw, (int)th);
 		ImGui::Text("MipMap Levels: %d", (int)curTex.mipLevels.size());
+
+		ImGui::PushItemWidth(fontWrapWidth - ImGui::CalcTextSize("Filter  ").x);
 		float zl = zoomLevel;
 		if(ImGui::SliderFloat("Zoom", &zl, 0.0125, 50.0f, "%.3f", ImGuiSliderFlags_Logarithmic)) {
 			zoomLevel = zl;
@@ -279,20 +281,21 @@ static void ImGuiFrame(GLFWwindow* window)
 		}
 
 		int texFilter = linearFilter;
-		if ( ImGui::Combo( "Texture filter", &texFilter, "Nearest\0Linear\0" ) ) {
+		if ( ImGui::Combo( "Filter", &texFilter, "Nearest\0Linear\0" ) ) {
 			if(texFilter != (int)linearFilter) {
 				linearFilter = texFilter != 0;
 				UpdateTextureFilter();
 			}
 		}
+
 		int mipLevel = mipmapLevel;
 		int maxLevel = std::max(0, int(curTex.mipLevels.size()) - 1);
 		if(maxLevel == 0) {
 			ImGui::BeginDisabled(true);
-			ImGui::SliderInt("Mip Map Level", &mipLevel, 0, 1, "0 (Texture has no Mip Maps)");
+			ImGui::SliderInt("LOD", &mipLevel, 0, 1, "0 (No Mip Maps)");
 			ImGui::EndDisabled();
 		} else {
-			const char* miplevelString = "Auto (normal mip mapping)";
+			const char* miplevelString = "Auto"; // (normal mip mapping)";
 			char miplevelStrBuf[64] = {};
 			if(mipLevel >= 0) {
 				mipLevel = std::min(mipLevel, maxLevel);
@@ -300,11 +303,13 @@ static void ImGuiFrame(GLFWwindow* window)
 				snprintf(miplevelStrBuf, sizeof(miplevelStrBuf), "%d (%dx%d)", mipLevel,
 						 curTex.mipLevels[mipLevel].width, curTex.mipLevels[mipLevel].height);
 			}
-			if(ImGui::SliderInt("Mip Map Level", &mipLevel, -1, maxLevel, miplevelString)) {
+			if(ImGui::SliderInt("LOD", &mipLevel, -1, maxLevel, miplevelString)) {
 				mipmapLevel = mipLevel;
 				SetMipmapLevel(mipLevel);
 			}
 		}
+
+		ImGui::Spacing(); ImGui::Spacing();
 
 		ImGui::Checkbox("Show ImGui Demo Window", &showImGuiDemoWindow);
 		imGuiMenuWidth = ImGui::GetWindowWidth();
