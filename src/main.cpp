@@ -47,6 +47,7 @@ static enum ViewMode {
 } viewMode;
 static bool viewAtSameSize = true;
 static int spacingBetweenMips = 2;
+static int numTiles[2] = {2, 2};
 
 static void glfw_error_callback(int error, const char* description)
 {
@@ -170,18 +171,25 @@ static void DrawTexture()
 {
 	float texW, texH;
 	curTex.GetSize(&texW, &texH);
-	if(viewMode == MIPMAPS_COMPACT) {
+	if(viewMode == SINGLE) {
+		DrawQuad(curGlTex, -1, ImVec2(0, 0), ImVec2(texW, texH));
+	} else if(viewMode == TILED) {
+		float tilesX = numTiles[0];
+		float tilesY = numTiles[1];
+		ImVec2 size(texW*tilesX, texH*tilesY);
+		DrawQuad(curGlTex, -1, ImVec2(0, 0), size, ImVec2(tilesX, tilesY));
+	} else if(viewAtSameSize) {
 		int numMips = (int)curTex.mipLevels.size();
-		if(viewAtSameSize) {
-			// try to have about the same number of mips
-			// in horizontal and vertical direction
-			int numHor = round(sqrt(numMips));
-			float posY = 0.0f;
+		if(viewMode == MIPMAPS_COMPACT) {
+			// try to have about the same with and height
+			// (but round up because more horizontally is preferable due to displays being wide)
+			int numHor = ceil(sqrtf(numMips * texH / texW));
 			float posX = 0.0f;
+			float posY = 0.0f;
 			float hOffset = texW + spacingBetweenMips;
 			float vOffset = texH + spacingBetweenMips;
 			int rowNum = 0;
-			for(int i=0; i<numMips; ++i) {
+			for(int i=0; i < numMips; ++i) {
 				DrawQuad(curGlTex, i, ImVec2(posX, posY), ImVec2(texW, texH));
 				if(((i+1) % numHor) == 0) {
 					posY += vOffset;
@@ -194,14 +202,44 @@ static void DrawTexture()
 					posX += hOffset;
 				}
 			}
-			return;
+		} else if(viewMode == MIPMAPS_ROW || viewMode == MIPMAPS_COLUMN) {
+			float hOffset = (viewMode == MIPMAPS_ROW) ? texW + spacingBetweenMips : 0.0f;
+			float vOffset = (viewMode == MIPMAPS_ROW) ? 0.0f : texH + spacingBetweenMips;
+			float posX = 0.0f;
+			float posY = 0.0f;
+			for(int i=0; i < numMips; ++i) {
+				DrawQuad(curGlTex, i, ImVec2(posX, posY), ImVec2(texW, texH));
+				posX += hOffset;
+				posY += vOffset;
+			}
 		} else {
+			assert(0 && "unknown viewmode?!");
+		}
+
+	} else { // don't view at same size
+		int numMips = (int)curTex.mipLevels.size();
+		if(viewMode == MIPMAPS_COMPACT) {
+
 			// TODO something spirally (well, not really, but I don't have a better word.. like the logo basically)
+
+		} else if(viewMode == MIPMAPS_ROW || viewMode == MIPMAPS_COLUMN) {
+			bool inRow = (viewMode == MIPMAPS_ROW);
+			float posX = 0.0f;
+			float posY = 0.0f;
+			for(int i=0; i < numMips; ++i) {
+				float w = curTex.mipLevels[i].width;
+				float h = curTex.mipLevels[i].height;
+				DrawQuad(curGlTex, i, ImVec2(posX, posY), ImVec2(w, h));
+				if(inRow) {
+					posX += spacingBetweenMips + w;
+				} else {
+					posY += spacingBetweenMips + h;
+				}
+			}
+		} else {
+			assert(0 && "unknown viewmode?!");
 		}
 	}
-	// keep single down here as default until all modes are implemented
-	//if(viewMode == SINGLE) {
-	DrawQuad(curGlTex, -1, ImVec2(0, 0), ImVec2(texW, texH));
 }
 
 static void GenericFrame(GLFWwindow* window)
@@ -292,16 +330,20 @@ static void ImGuiFrame(GLFWwindow* window)
 		if(ImGui::Button("Open File")) {
 			OpenFilePicker();
 		}
-		static float fontWrapWidth = 64.0f;
+		float fontWrapWidth = ImGui::CalcTextSize("0123456789abcdef0123456789ABCDEF").x;
 		ImGui::PushTextWrapPos(fontWrapWidth);
-		ImGui::TextWrapped("File: %s", curTex.name.c_str());
+		//ImGui::TextWrapped("File: %s", curTex.name.c_str());
+		ImGui::Text("File: ");
+		ImGui::BeginDisabled(true);
+		ImGui::TextWrapped("%s", curTex.name.c_str());
+		ImGui::EndDisabled();
 		ImGui::Text("Format: %s", curTex.formatName);
 		float tw, th;
 		curTex.GetSize(&tw, &th);
 		ImGui::Text("Texture Size: %d x %d", (int)tw, (int)th);
 		ImGui::Text("MipMap Levels: %d", (int)curTex.mipLevels.size());
 
-		ImGui::PushItemWidth(fontWrapWidth - ImGui::CalcTextSize("Filter  ").x);
+		ImGui::PushItemWidth(fontWrapWidth - ImGui::CalcTextSize("View Mode  ").x);
 		float zl = zoomLevel;
 		if(ImGui::SliderFloat("Zoom", &zl, 0.0125, 50.0f, "%.3f", ImGuiSliderFlags_Logarithmic)) {
 			zoomLevel = zl;
@@ -326,7 +368,6 @@ static void ImGuiFrame(GLFWwindow* window)
 		if(ImGui::Button("Reset Zoom")) {
 			zoomLevel = 1.0;
 		}
-		fontWrapWidth = ImGui::GetItemRectMax().x;
 		if(ImGui::Button("Reset Position")) {
 			transX = transY = 10.0;
 		}
@@ -351,8 +392,10 @@ static void ImGuiFrame(GLFWwindow* window)
 			ImGui::Checkbox("Show MipMaps at same size", &viewAtSameSize);
 			ImGui::SliderInt("Spacing", &spacingBetweenMips, 0, 32, "%d pix");
 			ImGui::SetItemTooltip("Spacing between mips");
+		} else if(vMode == TILED) {
+			ImGui::InputInt2("Tiles", numTiles);
 		}
-		if(viewMode == SINGLE || viewMode == TILED) {
+		if(vMode == SINGLE || vMode == TILED) {
 			int mipLevel = mipmapLevel;
 			int maxLevel = std::max(0, int(curTex.mipLevels.size()) - 1);
 			if(maxLevel == 0) {
@@ -368,7 +411,7 @@ static void ImGuiFrame(GLFWwindow* window)
 					snprintf(miplevelStrBuf, sizeof(miplevelStrBuf), "%d (%dx%d)", mipLevel,
 							 curTex.mipLevels[mipLevel].width, curTex.mipLevels[mipLevel].height);
 				}
-				if(ImGui::SliderInt("LOD", &mipLevel, -1, maxLevel, miplevelString)) {
+				if(ImGui::SliderInt("Mip Level", &mipLevel, -1, maxLevel, miplevelString)) {
 					mipmapLevel = mipLevel;
 					SetMipmapLevel(curGlTex, mipLevel);
 				}
