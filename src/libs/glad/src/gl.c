@@ -34,6 +34,7 @@ int GLAD_GL_VERSION_2_1 = 0;
 int GLAD_GL_VERSION_3_0 = 0;
 int GLAD_GL_VERSION_3_1 = 0;
 int GLAD_GL_VERSION_3_2 = 0;
+int GLAD_GL_ARB_ES3_compatibility = 0;
 int GLAD_GL_ARB_framebuffer_sRGB = 0;
 int GLAD_GL_ARB_texture_compression_bptc = 0;
 int GLAD_GL_ARB_texture_compression_rgtc = 0;
@@ -1519,6 +1520,7 @@ static int glad_gl_find_extensions_gl(void) {
     char **exts_i = NULL;
     if (!glad_gl_get_extensions(&exts, &exts_i)) return 0;
 
+    GLAD_GL_ARB_ES3_compatibility = glad_gl_has_extension(exts, exts_i, "GL_ARB_ES3_compatibility");
     GLAD_GL_ARB_framebuffer_sRGB = glad_gl_has_extension(exts, exts_i, "GL_ARB_framebuffer_sRGB");
     GLAD_GL_ARB_texture_compression_bptc = glad_gl_has_extension(exts, exts_i, "GL_ARB_texture_compression_bptc");
     GLAD_GL_ARB_texture_compression_rgtc = glad_gl_has_extension(exts, exts_i, "GL_ARB_texture_compression_rgtc");
