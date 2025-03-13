@@ -27,10 +27,10 @@ Contributions are welcome, but maybe ping me first so we don't accidentally impl
 - [ ] Show errors/warnings with ImGui instead of only printing to stderr
 - [x] Zooming in/out, dragging the texture around the window
 - [x] Support selecting linear and nearest filtering
-- [ ] Support showing all mipmap levels at once
-    - [ ] in a spiral-ish compact form, in a column, in a row
-    - [ ] at their relative sizes OR all in the same size (there the spiral probably should be a grid)
-- [ ] Support tiled view
+- [x] Support showing all mipmap levels at once
+    - [x] in a spiral-ish compact form, in a column, in a row
+    - [x] at their relative sizes OR all in the same size (there the spiral probably should be a grid)
+- [x] Support tiled view
     - [ ] including with different mipmap levels next to each other to see how the transitions line up
     - [ ] ideally also a perspective view with a big plane going towards infinity to see the texture's
           mipmapping (with different anisotropic filtering levels) in action

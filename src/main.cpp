@@ -220,7 +220,31 @@ static void DrawTexture()
 		int numMips = (int)curTex.mipLevels.size();
 		if(viewMode == MIPMAPS_COMPACT) {
 
-			// TODO something spirally (well, not really, but I don't have a better word.. like the logo basically)
+			bool toRight = (texW/texH <= 1.2f); // otherwise down
+
+			// below I adjust the spacing between mipmaps so it's not absurdly big
+			// for the smallest mips, by limiting it to half the current mipmap width or height
+			// but I also want to make sure that it's at least 2 pixels
+			// UNLESS spacingBetweenMips is smaller than that.
+			// using minSpace instead of 2 helps with that.
+			float minSpace = std::min(2, spacingBetweenMips);
+
+			float posX = 0.0f;
+			float posY = 0.0f;
+			for(int i=0; i < numMips; ++i) {
+				float w = curTex.mipLevels[i].width;
+				float h = curTex.mipLevels[i].height;
+				DrawQuad(curGlTex, i, ImVec2(posX, posY), ImVec2(w, h));
+
+				if( (toRight && (i & 1) == 0)
+				   || (!toRight && (i & 1) == 1) ) {
+					float space = std::max(minSpace, std::min(float(spacingBetweenMips), w * 0.5f));
+					posX += space + w;
+				} else {
+					float space = std::max(minSpace, std::min(float(spacingBetweenMips), h * 0.5f));
+					posY += space + h;
+				}
+			}
 
 		} else if(viewMode == MIPMAPS_ROW || viewMode == MIPMAPS_COLUMN) {
 			bool inRow = (viewMode == MIPMAPS_ROW);
@@ -372,13 +396,6 @@ static void ImGuiFrame(GLFWwindow* window)
 			transX = transY = 10.0;
 		}
 
-		int texFilter = linearFilter;
-		if(ImGui::Combo("Filter", &texFilter, "Nearest\0Linear\0")) {
-			if(texFilter != (int)linearFilter) {
-				linearFilter = texFilter != 0;
-				UpdateTextureFilter();
-			}
-		}
 		int vMode = viewMode;
 		if(ImGui::Combo("View Mode", &vMode, "Single\0MipMaps Compact\0MipMaps in Row\0MipMaps in Column\0Tiled\0")) {
 			// zoom out when not single, so everything (or at least more) is on the screen
@@ -415,6 +432,13 @@ static void ImGuiFrame(GLFWwindow* window)
 					mipmapLevel = mipLevel;
 					SetMipmapLevel(curGlTex, mipLevel);
 				}
+			}
+		}
+		int texFilter = linearFilter;
+		if(ImGui::Combo("Filter", &texFilter, "Nearest\0Linear\0")) {
+			if(texFilter != (int)linearFilter) {
+				linearFilter = texFilter != 0;
+				UpdateTextureFilter();
 			}
 		}
 
