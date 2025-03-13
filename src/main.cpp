@@ -367,6 +367,7 @@ static void ImGuiFrame(GLFWwindow* window)
 		ImGui::Text("Texture Size: %d x %d", (int)tw, (int)th);
 		ImGui::Text("MipMap Levels: %d", (int)curTex.mipLevels.size());
 
+		ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 		ImGui::PushItemWidth(fontWrapWidth - ImGui::CalcTextSize("View Mode  ").x);
 		float zl = zoomLevel;
 		if(ImGui::SliderFloat("Zoom", &zl, 0.0125, 50.0f, "%.3f", ImGuiSliderFlags_Logarithmic)) {
@@ -395,6 +396,8 @@ static void ImGuiFrame(GLFWwindow* window)
 		if(ImGui::Button("Reset Position")) {
 			transX = transY = 10.0;
 		}
+
+		ImGui::Spacing();
 
 		int vMode = viewMode;
 		if(ImGui::Combo("View Mode", &vMode, "Single\0MipMaps Compact\0MipMaps in Row\0MipMaps in Column\0Tiled\0")) {
@@ -434,6 +437,8 @@ static void ImGuiFrame(GLFWwindow* window)
 				}
 			}
 		}
+
+		ImGui::Spacing();
 		int texFilter = linearFilter;
 		if(ImGui::Combo("Filter", &texFilter, "Nearest\0Linear\0")) {
 			if(texFilter != (int)linearFilter) {
@@ -444,6 +449,7 @@ static void ImGuiFrame(GLFWwindow* window)
 
 		ImGui::Spacing(); ImGui::Spacing();
 		ImGui::Separator();
+		ImGui::Spacing();
 		ImGui::Checkbox("Show ImGui Demo Window", &showImGuiDemoWindow);
 		imGuiMenuWidth = ImGui::GetWindowWidth();
 	}
