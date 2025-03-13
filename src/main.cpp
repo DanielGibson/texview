@@ -38,6 +38,16 @@ static ImVec2 lastDragPos;
 static bool linearFilter = false;
 static int mipmapLevel = -1; // -1: auto, otherwise enforce that level
 
+static enum ViewMode {
+	SINGLE,
+	MIPMAPS_COMPACT,
+	MIPMAPS_ROW,
+	MIPMAPS_COLUMN,
+	TILED
+} viewMode;
+static bool viewAtSameSize = true;
+static int spacingBetweenMips = 2;
+
 static void glfw_error_callback(int error, const char* description)
 {
 	errprintf("GLFW Error: %d - %s\n", error, description);
@@ -130,7 +140,7 @@ static void LoadTexture(const char* path)
 	}
 }
 
-// mipLevel -1 = "don't change mipmap settings"
+// mipLevel -1 == use configured mipmapLevel
 static void DrawQuad(GLuint tex, int mipLevel, ImVec2 pos, ImVec2 size, ImVec2 texCoordMax = ImVec2(1, 1), ImVec2 texCoordMin = ImVec2(0, 0))
 {
 	if(tex) {
@@ -138,9 +148,7 @@ static void DrawQuad(GLuint tex, int mipLevel, ImVec2 pos, ImVec2 size, ImVec2 t
 		glEnable(GL_TEXTURE_2D);
 		glBindTexture(GL_TEXTURE_2D, tex);
 
-		if(mipLevel >= 0) {
-			SetMipmapLevel(tex, mipLevel, false);
-		}
+		SetMipmapLevel(tex, (mipLevel < 0) ? mipmapLevel : mipLevel, false);
 
 		glBegin(GL_QUADS);
 			glTexCoord2f(texCoordMin.x, texCoordMin.y);
@@ -156,6 +164,44 @@ static void DrawQuad(GLuint tex, int mipLevel, ImVec2 pos, ImVec2 size, ImVec2 t
 			glVertex2f(pos.x + size.x, pos.y);
 		glEnd();
 	}
+}
+
+static void DrawTexture()
+{
+	float texW, texH;
+	curTex.GetSize(&texW, &texH);
+	if(viewMode == MIPMAPS_COMPACT) {
+		int numMips = (int)curTex.mipLevels.size();
+		if(viewAtSameSize) {
+			// try to have about the same number of mips
+			// in horizontal and vertical direction
+			int numHor = round(sqrt(numMips));
+			float posY = 0.0f;
+			float posX = 0.0f;
+			float hOffset = texW + spacingBetweenMips;
+			float vOffset = texH + spacingBetweenMips;
+			int rowNum = 0;
+			for(int i=0; i<numMips; ++i) {
+				DrawQuad(curGlTex, i, ImVec2(posX, posY), ImVec2(texW, texH));
+				if(((i+1) % numHor) == 0) {
+					posY += vOffset;
+					// change horizontal direction every line
+					// so the next level of the last mip of one line
+					// is right below it instead of the start of the next line
+					hOffset = -hOffset;
+					++rowNum;
+				} else {
+					posX += hOffset;
+				}
+			}
+			return;
+		} else {
+			// TODO something spirally (well, not really, but I don't have a better word.. like the logo basically)
+		}
+	}
+	// keep single down here as default until all modes are implemented
+	//if(viewMode == SINGLE) {
+	DrawQuad(curGlTex, -1, ImVec2(0, 0), ImVec2(texW, texH));
 }
 
 static void GenericFrame(GLFWwindow* window)
@@ -184,11 +230,7 @@ static void GenericFrame(GLFWwindow* window)
 	glScaled(zoomLevel, zoomLevel, 1);
 	glTranslated(transX * sx, transY * sy, 0.0);
 
-	float texW, texH;
-	curTex.GetSize(&texW, &texH);
-	int mipLevel = -1; // TODO
-	DrawQuad(curGlTex, mipLevel, ImVec2(0, 0), ImVec2(texW, texH));
-
+	DrawTexture();
 }
 
 
@@ -290,36 +332,51 @@ static void ImGuiFrame(GLFWwindow* window)
 		}
 
 		int texFilter = linearFilter;
-		if ( ImGui::Combo( "Filter", &texFilter, "Nearest\0Linear\0" ) ) {
+		if(ImGui::Combo("Filter", &texFilter, "Nearest\0Linear\0")) {
 			if(texFilter != (int)linearFilter) {
 				linearFilter = texFilter != 0;
 				UpdateTextureFilter();
 			}
 		}
-
-		int mipLevel = mipmapLevel;
-		int maxLevel = std::max(0, int(curTex.mipLevels.size()) - 1);
-		if(maxLevel == 0) {
-			ImGui::BeginDisabled(true);
-			ImGui::SliderInt("LOD", &mipLevel, 0, 1, "0 (No Mip Maps)");
-			ImGui::EndDisabled();
-		} else {
-			const char* miplevelString = "Auto"; // (normal mip mapping)";
-			char miplevelStrBuf[64] = {};
-			if(mipLevel >= 0) {
-				mipLevel = std::min(mipLevel, maxLevel);
-				miplevelString = miplevelStrBuf;
-				snprintf(miplevelStrBuf, sizeof(miplevelStrBuf), "%d (%dx%d)", mipLevel,
-						 curTex.mipLevels[mipLevel].width, curTex.mipLevels[mipLevel].height);
+		int vMode = viewMode;
+		if(ImGui::Combo("View Mode", &vMode, "Single\0MipMaps Compact\0MipMaps in Row\0MipMaps in Column\0Tiled\0")) {
+			// zoom out when not single, so everything (or at least more) is on the screen
+			// TODO: do some calculation for good amount of zooming out here?
+			if(viewMode == SINGLE && vMode != SINGLE) {
+				zoomLevel *= 0.5;
 			}
-			if(ImGui::SliderInt("LOD", &mipLevel, -1, maxLevel, miplevelString)) {
-				mipmapLevel = mipLevel;
-				SetMipmapLevel(curGlTex, mipLevel);
+			viewMode = (ViewMode)vMode;
+		}
+		if(vMode != SINGLE && vMode != TILED) {
+			ImGui::Checkbox("Show MipMaps at same size", &viewAtSameSize);
+			ImGui::SliderInt("Spacing", &spacingBetweenMips, 0, 32, "%d pix");
+			ImGui::SetItemTooltip("Spacing between mips");
+		}
+		if(viewMode == SINGLE || viewMode == TILED) {
+			int mipLevel = mipmapLevel;
+			int maxLevel = std::max(0, int(curTex.mipLevels.size()) - 1);
+			if(maxLevel == 0) {
+				ImGui::BeginDisabled(true);
+				ImGui::SliderInt("LOD", &mipLevel, 0, 1, "0 (No Mip Maps)");
+				ImGui::EndDisabled();
+			} else {
+				const char* miplevelString = "Auto"; // (normal mip mapping)";
+				char miplevelStrBuf[64] = {};
+				if(mipLevel >= 0) {
+					mipLevel = std::min(mipLevel, maxLevel);
+					miplevelString = miplevelStrBuf;
+					snprintf(miplevelStrBuf, sizeof(miplevelStrBuf), "%d (%dx%d)", mipLevel,
+							 curTex.mipLevels[mipLevel].width, curTex.mipLevels[mipLevel].height);
+				}
+				if(ImGui::SliderInt("LOD", &mipLevel, -1, maxLevel, miplevelString)) {
+					mipmapLevel = mipLevel;
+					SetMipmapLevel(curGlTex, mipLevel);
+				}
 			}
 		}
 
 		ImGui::Spacing(); ImGui::Spacing();
-
+		ImGui::Separator();
 		ImGui::Checkbox("Show ImGui Demo Window", &showImGuiDemoWindow);
 		imGuiMenuWidth = ImGui::GetWindowWidth();
 	}
