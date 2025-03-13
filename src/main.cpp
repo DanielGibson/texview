@@ -139,6 +139,9 @@ static void LoadTexture(const char* path)
 		}
 		SetMipmapLevel(curGlTex, mipmapLevel, false);
 	}
+
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
 // mipLevel -1 == use configured mipmapLevel
@@ -448,6 +451,9 @@ static void ImGuiFrame(GLFWwindow* window)
 		}
 
 		ImGui::Spacing(); ImGui::Spacing();
+
+		ImGui::ColorEdit3("BG Color", &clear_color.x);
+
 		ImGui::Separator();
 		ImGui::Spacing();
 		ImGui::Checkbox("Show ImGui Demo Window", &showImGuiDemoWindow);
