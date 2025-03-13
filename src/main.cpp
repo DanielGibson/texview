@@ -290,7 +290,7 @@ static void GenericFrame(GLFWwindow* window)
 	glLoadIdentity();
 
 	glScaled(zoomLevel, zoomLevel, 1);
-	glTranslated(transX * sx, transY * sy, 0.0);
+	glTranslated((transX * sx) / zoomLevel, (transY * sy) / zoomLevel, 0.0);
 
 	DrawTexture();
 }
@@ -460,8 +460,8 @@ static void ImGuiFrame(GLFWwindow* window)
 			if(dragging) {
 				float dx = mousePos.x - lastDragPos.x;
 				float dy = mousePos.y - lastDragPos.y;
-				transX += dx / zoomLevel;
-				transY += dy / zoomLevel;
+				transX += dx;
+				transY += dy;
 				lastDragPos = mousePos;
 			} else {
 				lastDragPos = mousePos;
