@@ -157,7 +157,6 @@ const FormatInfo comprFormatTable[] = {
 	// now the DXT1-5 and BC4/5 formats as BC1-5 from DXGI_FORMAT
 	{ DX10, DXGI_FORMAT_BC1_UNORM,      GL_COMPRESSED_RGB_S3TC_DXT1_EXT,  BLOCK8,  "BC1 (DXT1) opaque", 0, DDS_DX10MISC2_ALPHA_OPAQUE },
 	{ DX10, DXGI_FORMAT_BC1_UNORM,      GL_COMPRESSED_RGBA_S3TC_DXT1_EXT, BLOCK8,  "BC1 (DXT1)" },
-	// FIXME: GL_EXT_texture_sRGB for GL_COMPRESSED_SRGB_S3TC_DXT1_EXT etc
 	{ DX10, DXGI_FORMAT_BC1_UNORM_SRGB, GL_COMPRESSED_SRGB_S3TC_DXT1_EXT, BLOCK8,  "BC1 (DXT1) sRGB opaque", 0, DDS_DX10MISC2_ALPHA_OPAQUE, OF_SRGB },
 	{ DX10, DXGI_FORMAT_BC1_UNORM_SRGB, GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT, BLOCK8,  "BC1 (DXT1) sRGB" },
 	// TODO: what are those typeless formats good for? are they used in files or only for buffers?
@@ -185,14 +184,28 @@ const FormatInfo comprFormatTable[] = {
 	{ DX10, DXGI_FORMAT_BC6H_SF16,      GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT_ARB,   BLOCK16, "BC6S (BPTC HDR)" },
 	{ DX10, DXGI_FORMAT_BC6H_UF16,      GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_ARB, BLOCK16, "BC6U (BPTC HDR)" },
 	{ DX10, DXGI_FORMAT_BC6H_TYPELESS,  GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_ARB, BLOCK16, "BC6  (BPTC HDR) typeless", 0, 0, OF_TYPELESS },
+	{ PIXEL_FMT_BC6H,   0,              GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_ARB, BLOCK16, "BC6U (BPTC HDR)" },
 
 	{ DX10, DXGI_FORMAT_BC7_UNORM,      GL_COMPRESSED_RGBA_BPTC_UNORM_ARB,         BLOCK16, "BC7 (BPTC)" },
 	{ DX10, DXGI_FORMAT_BC7_UNORM_SRGB, GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM_ARB,   BLOCK16, "BC7 SRGB (BPTC)" },
 	{ DX10, DXGI_FORMAT_BC7_TYPELESS,   GL_COMPRESSED_RGBA_BPTC_UNORM_ARB,         BLOCK16, "BC7 (BPTC) typeless", 0, 0, OF_TYPELESS },
+	{ PIXEL_FMT_BC7L,   0,              GL_COMPRESSED_RGBA_BPTC_UNORM_ARB,         BLOCK16, "BC7 (BPTC)" },
+	{ PIXEL_FMT_BC7,    0,              GL_COMPRESSED_RGBA_BPTC_UNORM_ARB,         BLOCK16, "BC7 (BPTC)" },
 
+	// ETC1/2
+	// https://registry.khronos.org/OpenGL-Refpages/es3.0/html/glCompressedTexImage2D.xhtm documents blocksizes
+	{ PIXEL_FMT_ETC1,    0, GL_COMPRESSED_RGB8_ETC2,        BLOCK8,   "ETC1" }, // ETC1 can be loaded as ETC2 RGB
+	{ PIXEL_FMT_ETC,     0, GL_COMPRESSED_RGB8_ETC2,        BLOCK8,   "ETC1" },
+	{ PIXEL_FMT_ETC2,    0, GL_COMPRESSED_RGB8_ETC2,        BLOCK8,   "ETC2" },
+	// TODO: the previous formats with DDPF_ALPHAPIXELS for GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2 ?
+	{ PIXEL_FMT_ETC2A,   0, GL_COMPRESSED_RGBA8_ETC2_EAC,   BLOCK16,  "ETC2 with Alpha" },
+
+	{ PIXEL_FMT_EACR11,  0, GL_COMPRESSED_R11_EAC,          BLOCK8,   "EAC R11" },
+	{ PIXEL_FMT_EACRG11, 0, GL_COMPRESSED_RG11_EAC,         BLOCK16,  "EAC RG11" },
 };
 
 struct ASTCInfo {
+	uint32_t ddsFourCC;
 	int dxgiFormat;
 	uint32_t glFormat;
 	// ASTC 12x10 has blockW 12 and blockH 10
@@ -221,11 +234,13 @@ struct ASTCInfo {
 const ASTCInfo astcFormatTable[] = {
 
 #define ASTC_SIZE(W, H) \
-	{ DXGI_FORMAT_ASTC_ ## W ## X ## H ## _TYPELESS, GL_COMPRESSED_RGBA_ASTC_ ## W ## x ## H ## _KHR, \
+	{ DX10, DXGI_FORMAT_ASTC_ ## W ## X ## H ## _TYPELESS, GL_COMPRESSED_RGBA_ASTC_ ## W ## x ## H ## _KHR, \
 		W, H, OF_TYPELESS, "ASTC " #W "x" #H " typeless" }, \
-	{ DXGI_FORMAT_ASTC_ ## W ## X ## H ## _UNORM, GL_COMPRESSED_RGBA_ASTC_ ## W ## x ## H ## _KHR, \
+	{ DX10, DXGI_FORMAT_ASTC_ ## W ## X ## H ## _UNORM, GL_COMPRESSED_RGBA_ASTC_ ## W ## x ## H ## _KHR, \
 		W, H, 0, "ASTC " #W "x" #H " UNORM" }, \
-	{ DXGI_FORMAT_ASTC_ ## W ## X ## H ## _UNORM_SRGB, GL_COMPRESSED_SRGB8_ALPHA8_ASTC_ ## W ## x ## H ## _KHR, \
+	{ PIXEL_FMT_ASTC_ ## W ## x ## H, 0, GL_COMPRESSED_RGBA_ASTC_ ## W ## x ## H ## _KHR, \
+		W, H, 0, "ASTC " #W "x" #H " UNORM" }, \
+	{ DX10, DXGI_FORMAT_ASTC_ ## W ## X ## H ## _UNORM_SRGB, GL_COMPRESSED_SRGB8_ALPHA8_ASTC_ ## W ## x ## H ## _KHR, \
 		W, H, OF_SRGB, "ASTC " #W "x" #H " UNORM SRGB" },
 
 	// expand all ASTC_SIZE() entries in the ASTC_SIZES table
@@ -233,6 +248,20 @@ const ASTCInfo astcFormatTable[] = {
 	ASTC_SIZES
 
 #undef ASTC_SIZE
+
+	// special case: alternative FOURCCs (from BGFX BIMG) for w or h >= 10
+#define ALT_ASTC_ENTRY(W, H) \
+	{ PIXEL_FMT_ASTC_ ## W ## x ## H ## _ALT, 0, GL_COMPRESSED_RGBA_ASTC_ ## W ## x ## H ## _KHR, \
+		W, H, 0, "ASTC " #W "x" #H " UNORM" }
+
+	ALT_ASTC_ENTRY(10, 5),
+	ALT_ASTC_ENTRY(10, 6),
+	ALT_ASTC_ENTRY(10, 8),
+	ALT_ASTC_ENTRY(10, 10),
+	ALT_ASTC_ENTRY(12, 10),
+	ALT_ASTC_ENTRY(12, 12),
+
+#undef ALT_ASTC_ENTRY
 };
 
 const FormatInfo unComprFormatTable[] = {
@@ -304,11 +333,12 @@ static uint32_t CalcSize(uint32_t w, uint32_t h, int32_t pitchTypeOrBitsPPixel)
 	return size;
 }
 
-static ASTCInfo FindASTCFormat(int dxgiFmt)
+// pass dxgiFmt = 0 if fourcc != DX10 !
+static ASTCInfo FindASTCFormat(uint32_t fourcc, int dxgiFmt)
 {
 	ASTCInfo ret = {};
 	for(const ASTCInfo& ai : astcFormatTable) {
-		if(ai.dxgiFormat == dxgiFmt) {
+		if(ai.ddsFourCC == fourcc && ai.dxgiFormat == dxgiFmt) {
 			ret = ai;
 			break;
 		}
@@ -367,20 +397,24 @@ bool Texture::LoadDDS(MemMappedFile* mmf, const char* filename)
 	FormatInfo fmtInfo = {};
 	ASTCInfo astcInfo = {};
 	bool isASTC = false;
-	if(fourcc == DX10fourcc && (unsigned)dxgiFmt >= DXGI_FORMAT_ASTC_4X4_TYPELESS
-	                        && (unsigned)dxgiFmt <= DXGI_FORMAT_ASTC_12X12_UNORM_SRGB)
+	if( (fourcc == DX10fourcc && (unsigned)dxgiFmt >= DXGI_FORMAT_ASTC_4X4_TYPELESS
+	                          && (unsigned)dxgiFmt <= DXGI_FORMAT_ASTC_12X12_UNORM_SRGB)
+	   || (fourcc & PIXEL_FMT_FOURCC('A', 'S', 0, 0)) == PIXEL_FMT_FOURCC('A', 'S', 0, 0) ) // all ASTC fourccs start with 'AS'
 	{
-		astcInfo = FindASTCFormat(dxgiFmt);
-		if(astcInfo.glFormat == 0) {
+		astcInfo = FindASTCFormat(fourcc, (fourcc == DX10fourcc) ? dxgiFmt: 0);
+		if(astcInfo.glFormat != 0) {
+			isASTC = true;
+			dataFormat = astcInfo.glFormat;
+			formatName = astcInfo.name;
+			formatIsCompressed = true;
+		} else if(fourcc == DX10fourcc) {
 			errprintf("Couldn't detect data format of '%s' - its dxgiFormat (%d) is in the ASTC-range, but apparently didn't match any actual format\n",
 			          filename, dxgiFmt);
 			return false;
-		}
-		isASTC = true;
-		dataFormat = astcInfo.glFormat;
-		formatName = astcInfo.name;
-		formatIsCompressed = true;
-	} else {
+		} // otherwise it was the "fourcc starts with 'AS'" case, for that also try the regular format table
+
+	}
+	if(!isASTC) {
 		fmtInfo = FindFormat(fourcc, dxgiFmt, header->ddpfPixelFormat.dwFlags, dx10misc2);
 		if(fmtInfo.glFormat == 0) {
 			char fccstr[5] = { char(fourcc & 0xff), char((fourcc >> 8) & 0xff),

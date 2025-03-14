@@ -1,7 +1,12 @@
 // taken from https://github.com/richgel999/bc7enc_rdo, where it's put into
 // the Public Domain (or alternatively MIT License)
-// I also adjusted some names to better match the Microsoft documentation
+//
+// I adjusted some names to better match the Microsoft documentation
 // https://learn.microsoft.com/en-us/windows/win32/direct3ddds/dds-header
+// and added more (inofficial) PIXEL_FMT_* and DXGI_FORMAT_* entries
+// All changes to this file are also put into the Public Domain
+// or alternatively MIT license.
+//
 // File: dds_defs.h
 // DX9/10 .DDS file header definitions.
 #pragma once
@@ -27,8 +32,13 @@ enum pixel_format
 	PIXEL_FMT_BC4U = PIXEL_FMT_FOURCC('B', 'C', '4', 'U'), // BC4 UNORM
 	PIXEL_FMT_BC4S = PIXEL_FMT_FOURCC('B', 'C', '4', 'S'), // BC4 SNORM
 
+	// the following are not standard, I think, but I've seen them in some header..
+	PIXEL_FMT_BC6H = PIXEL_FMT_FOURCC('B', 'C', '6', 'H'), // UF16
+	PIXEL_FMT_BC7L = PIXEL_FMT_FOURCC('B', 'C', '7', 'L'),
+	PIXEL_FMT_BC7 = PIXEL_FMT_FOURCC('B', 'C', '7', '0'),
+
 	// Non-standard formats (some of these are supported by ATI's Compressonator)
-	// their fourcc is set in dwRGBBitCount (fourcc is that of base type)
+	// their fourcc is set in dwRGBBitCount (fourcc is that of the base type)
 	PIXEL_FMT_DXT5_CCxY = PIXEL_FMT_FOURCC('C', 'C', 'x', 'Y'),
 	PIXEL_FMT_DXT5_xGxR = PIXEL_FMT_FOURCC('x', 'G', 'x', 'R'),
 	PIXEL_FMT_DXT5_xGBR = PIXEL_FMT_FOURCC('x', 'G', 'B', 'R'),
@@ -38,7 +48,39 @@ enum pixel_format
 	PIXEL_FMT_DXT5_RXGB = PIXEL_FMT_FOURCC('R', 'X', 'G', 'B'),
 
 	PIXEL_FMT_DXT1A = PIXEL_FMT_FOURCC('D', 'X', '1', 'A'), // BC1 with alpha?
+
+	// most of these ETC FourCCs can be found in dds-ktx.h, for example
 	PIXEL_FMT_ETC1 = PIXEL_FMT_FOURCC('E', 'T', 'C', '1'),
+	PIXEL_FMT_ETC = PIXEL_FMT_FOURCC('E', 'T', 'C', ' '), // GLI defines this
+	PIXEL_FMT_ETC2 = PIXEL_FMT_FOURCC('E', 'T', 'C', '2'),
+	PIXEL_FMT_ETC2A = PIXEL_FMT_FOURCC('E', 'C', '2', 'A'),
+	PIXEL_FMT_EACR11 = PIXEL_FMT_FOURCC('E', 'A', 'R', ' '), // cryengine/lumberyard defines this one
+	PIXEL_FMT_EACRG11 = PIXEL_FMT_FOURCC('E', 'A', 'R', 'G'), // .. and this one as well
+
+	// I found most of these ASTC FourCCs in a cryengine/lumberyard header
+	// https://github.com/aws/lumberyard/blob/413ecaf24d7a534801cac64f50272fe3191d278f/dev/Code/CryEngine/CryCommon/ImageExtensionHelper.h#L1487C86-L1505
+	// some of them were also in dds-ktx.h and/or BGFX BIMG image.cpp (esp. the _ALT ones)
+	PIXEL_FMT_ASTC_4x4 = PIXEL_FMT_FOURCC('A', 'S', '4', '4'),
+	PIXEL_FMT_ASTC_5x4 = PIXEL_FMT_FOURCC('A', 'S', '5', '4'),
+	PIXEL_FMT_ASTC_5x5 = PIXEL_FMT_FOURCC('A', 'S', '5', '5'),
+	PIXEL_FMT_ASTC_6x5 = PIXEL_FMT_FOURCC('A', 'S', '6', '5'),
+	PIXEL_FMT_ASTC_6x6 = PIXEL_FMT_FOURCC('A', 'S', '6', '6'),
+	PIXEL_FMT_ASTC_8x5 = PIXEL_FMT_FOURCC('A', 'S', '8', '5'),
+	PIXEL_FMT_ASTC_8x6 = PIXEL_FMT_FOURCC('A', 'S', '8', '6'),
+	PIXEL_FMT_ASTC_8x8 = PIXEL_FMT_FOURCC('A', 'S', '8', '8'),
+	PIXEL_FMT_ASTC_10x5 = PIXEL_FMT_FOURCC('A', 'S', 'A', '5'),
+	PIXEL_FMT_ASTC_10x6 = PIXEL_FMT_FOURCC('A', 'S', 'A', '6'),
+	PIXEL_FMT_ASTC_10x8 = PIXEL_FMT_FOURCC('A', 'S', 'A', '8'),
+	PIXEL_FMT_ASTC_10x10 = PIXEL_FMT_FOURCC('A', 'S', 'A', 'A'),
+	PIXEL_FMT_ASTC_12x10 = PIXEL_FMT_FOURCC('A', 'S', 'C', 'A'),
+	PIXEL_FMT_ASTC_12x12 = PIXEL_FMT_FOURCC('A', 'S', 'C', 'C'),
+	// alternative FourCCs found in BIMG:
+	PIXEL_FMT_ASTC_10x5_ALT = PIXEL_FMT_FOURCC('A', 'S', ':', '5'),
+	PIXEL_FMT_ASTC_10x6_ALT = PIXEL_FMT_FOURCC('A', 'S', ':', '6'),
+	PIXEL_FMT_ASTC_10x8_ALT = PIXEL_FMT_FOURCC('A', 'S', ':', '8'),
+	PIXEL_FMT_ASTC_10x10_ALT = PIXEL_FMT_FOURCC('A', 'S', ':', ':'),
+	PIXEL_FMT_ASTC_12x10_ALT = PIXEL_FMT_FOURCC('A', 'S', '<', ':'),
+	PIXEL_FMT_ASTC_12x12_ALT = PIXEL_FMT_FOURCC('A', 'S', '<', '<'),
 
 	PIXEL_FMT_R8G8B8 = PIXEL_FMT_FOURCC('R', 'G', 'B', 'x'),
 	PIXEL_FMT_L8 = PIXEL_FMT_FOURCC('L', 'x', 'x', 'x'),
