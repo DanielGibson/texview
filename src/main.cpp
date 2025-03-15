@@ -19,9 +19,11 @@
 #include "data/texview_icon.h"
 #include "data/texview_icon32.h"
 
+static GLFWwindow* glfwWindow;
+
 static ImVec4 clear_color(0.45f, 0.55f, 0.60f, 1.00f);
 
-static GLuint curGlTex; // TODO: should probably support more than one eventually..
+// TODO: should probably support more than one texture eventually..
 static texview::Texture curTex;
 
 static bool showImGuiDemoWindow = false;
@@ -56,9 +58,10 @@ static void glfw_error_callback(int error, const char* description)
 
 // mipLevel -1 = auto (let GPU choose from all levels)
 // otherwise use the given level (if it exists..)
-static void SetMipmapLevel(GLuint tex, GLint mipLevel, bool bindTexture = true)
+static void SetMipmapLevel(texview::Texture& texture, GLint mipLevel, bool bindTexture = true)
 {
-	GLint numMips = (GLint)curTex.mipLevels.size(); // TODO: pass Texture, and maybe give Texture a glTex member
+	GLuint tex = texture.glTextureHandle;
+	GLint numMips = (GLint)texture.mipLevels.size();
 	if(tex == 0 || numMips == 1) {
 		return;
 	}
@@ -80,11 +83,12 @@ static void SetMipmapLevel(GLuint tex, GLint mipLevel, bool bindTexture = true)
 
 static void UpdateTextureFilter(bool bindTex = true)
 {
-	if(curGlTex == 0) {
+	GLuint glTex = curTex.glTextureHandle;
+	if(glTex == 0) {
 		return;
 	}
 	if(bindTex) {
-		glBindTexture(GL_TEXTURE_2D, curGlTex);
+		glBindTexture(GL_TEXTURE_2D, glTex);
 	}
 	GLint filter = linearFilter ? GL_LINEAR : GL_NEAREST;
 	if(curTex.mipLevels.size() == 1) {
@@ -108,28 +112,27 @@ static void LoadTexture(const char* path)
 
 		curTex = std::move(newTex);
 	}
+	// set windowtitle to filename (not entire path)
+	{
+		const char* fileName = strrchr(path, '/');
+#ifdef _WIN32
+		const char* lastBS = strrchr(path, '\\');
+		if( lastBS != nullptr && (fileName == nullptr || fileName < lastBS) )
+			fileName = lastBS;
+#endif
+		if(fileName == nullptr)
+			fileName = path;
+		else
+			++fileName; // skip (back)slash
 
-	if(curGlTex != 0) {
-		glDeleteTextures(1, &curGlTex);
-		curGlTex = 0;
+		char winTitle[256];
+		snprintf(winTitle, sizeof(winTitle), "Texture Viewer - %s", fileName);
+
+		glfwSetWindowTitle(glfwWindow, winTitle);
 	}
-	glGenTextures(1, &curGlTex);
-	glBindTexture(GL_TEXTURE_2D, curGlTex);
 
-	GLint internalFormat = curTex.dataFormat;
+	curTex.CreateOpenGLtexture();
 	int numMips = (int)curTex.mipLevels.size();
-
-	for(int i=0; i<numMips; ++i) {
-		if(curTex.formatIsCompressed) {
-			glCompressedTexImage2D(GL_TEXTURE_2D, i, internalFormat,
-			                       curTex.mipLevels[i].width, curTex.mipLevels[i].height,
-			                       0, curTex.mipLevels[i].size, curTex.mipLevels[i].data);
-		} else {
-			glTexImage2D(GL_TEXTURE_2D, i, internalFormat, curTex.mipLevels[i].width,
-			             curTex.mipLevels[i].height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-			             curTex.mipLevels[i].data);
-		}
-	}
 
 	UpdateTextureFilter(false);
 	if(numMips > 1) {
@@ -137,7 +140,7 @@ static void LoadTexture(const char* path)
 			// if it's set to auto, keep it at auto, otherwise default to 0
 			mipmapLevel = 0;
 		}
-		SetMipmapLevel(curGlTex, mipmapLevel, false);
+		SetMipmapLevel(curTex, mipmapLevel, false);
 	}
 
 	glEnable(GL_BLEND);
@@ -145,14 +148,15 @@ static void LoadTexture(const char* path)
 }
 
 // mipLevel -1 == use configured mipmapLevel
-static void DrawQuad(GLuint tex, int mipLevel, ImVec2 pos, ImVec2 size, ImVec2 texCoordMax = ImVec2(1, 1), ImVec2 texCoordMin = ImVec2(0, 0))
+static void DrawQuad(texview::Texture& texture, int mipLevel, ImVec2 pos, ImVec2 size, ImVec2 texCoordMax = ImVec2(1, 1), ImVec2 texCoordMin = ImVec2(0, 0))
 {
+	GLuint tex = texture.glTextureHandle;
 	if(tex) {
 
 		glEnable(GL_TEXTURE_2D);
 		glBindTexture(GL_TEXTURE_2D, tex);
 
-		SetMipmapLevel(tex, (mipLevel < 0) ? mipmapLevel : mipLevel, false);
+		SetMipmapLevel(texture, (mipLevel < 0) ? mipmapLevel : mipLevel, false);
 
 		glBegin(GL_QUADS);
 			glTexCoord2f(texCoordMin.x, texCoordMin.y);
@@ -172,17 +176,18 @@ static void DrawQuad(GLuint tex, int mipLevel, ImVec2 pos, ImVec2 size, ImVec2 t
 
 static void DrawTexture()
 {
+	texview::Texture& tex = curTex;
 	float texW, texH;
-	curTex.GetSize(&texW, &texH);
+	tex.GetSize(&texW, &texH);
 	if(viewMode == SINGLE) {
-		DrawQuad(curGlTex, -1, ImVec2(0, 0), ImVec2(texW, texH));
+		DrawQuad(tex, -1, ImVec2(0, 0), ImVec2(texW, texH));
 	} else if(viewMode == TILED) {
 		float tilesX = numTiles[0];
 		float tilesY = numTiles[1];
 		ImVec2 size(texW*tilesX, texH*tilesY);
-		DrawQuad(curGlTex, -1, ImVec2(0, 0), size, ImVec2(tilesX, tilesY));
+		DrawQuad(tex, -1, ImVec2(0, 0), size, ImVec2(tilesX, tilesY));
 	} else if(viewAtSameSize) {
-		int numMips = (int)curTex.mipLevels.size();
+		int numMips = (int)tex.mipLevels.size();
 		if(viewMode == MIPMAPS_COMPACT) {
 			// try to have about the same with and height
 			// (but round up because more horizontally is preferable due to displays being wide)
@@ -193,7 +198,7 @@ static void DrawTexture()
 			float vOffset = texH + spacingBetweenMips;
 			int rowNum = 0;
 			for(int i=0; i < numMips; ++i) {
-				DrawQuad(curGlTex, i, ImVec2(posX, posY), ImVec2(texW, texH));
+				DrawQuad(tex, i, ImVec2(posX, posY), ImVec2(texW, texH));
 				if(((i+1) % numHor) == 0) {
 					posY += vOffset;
 					// change horizontal direction every line
@@ -211,7 +216,7 @@ static void DrawTexture()
 			float posX = 0.0f;
 			float posY = 0.0f;
 			for(int i=0; i < numMips; ++i) {
-				DrawQuad(curGlTex, i, ImVec2(posX, posY), ImVec2(texW, texH));
+				DrawQuad(tex, i, ImVec2(posX, posY), ImVec2(texW, texH));
 				posX += hOffset;
 				posY += vOffset;
 			}
@@ -220,7 +225,7 @@ static void DrawTexture()
 		}
 
 	} else { // don't view at same size
-		int numMips = (int)curTex.mipLevels.size();
+		int numMips = (int)tex.mipLevels.size();
 		if(viewMode == MIPMAPS_COMPACT) {
 
 			bool toRight = (texW/texH <= 1.2f); // otherwise down
@@ -235,9 +240,9 @@ static void DrawTexture()
 			float posX = 0.0f;
 			float posY = 0.0f;
 			for(int i=0; i < numMips; ++i) {
-				float w = curTex.mipLevels[i].width;
-				float h = curTex.mipLevels[i].height;
-				DrawQuad(curGlTex, i, ImVec2(posX, posY), ImVec2(w, h));
+				float w = tex.mipLevels[i].width;
+				float h = tex.mipLevels[i].height;
+				DrawQuad(tex, i, ImVec2(posX, posY), ImVec2(w, h));
 
 				if( (toRight && (i & 1) == 0)
 				   || (!toRight && (i & 1) == 1) ) {
@@ -254,9 +259,9 @@ static void DrawTexture()
 			float posX = 0.0f;
 			float posY = 0.0f;
 			for(int i=0; i < numMips; ++i) {
-				float w = curTex.mipLevels[i].width;
-				float h = curTex.mipLevels[i].height;
-				DrawQuad(curGlTex, i, ImVec2(posX, posY), ImVec2(w, h));
+				float w = tex.mipLevels[i].width;
+				float h = tex.mipLevels[i].height;
+				DrawQuad(tex, i, ImVec2(posX, posY), ImVec2(w, h));
 				if(inRow) {
 					posX += spacingBetweenMips + w;
 				} else {
@@ -436,7 +441,7 @@ static void ImGuiFrame(GLFWwindow* window)
 				}
 				if(ImGui::SliderInt("Mip Level", &mipLevel, -1, maxLevel, miplevelString)) {
 					mipmapLevel = mipLevel;
-					SetMipmapLevel(curGlTex, mipLevel);
+					SetMipmapLevel(curTex, mipLevel);
 				}
 			}
 		}
@@ -581,9 +586,9 @@ int main(int argc, char** argv)
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 	//glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	GLFWwindow* window = glfwCreateWindow(1280, 720, "Texture Viewer", nullptr, nullptr);
-	if (window == nullptr) {
-		errprintf("Couldn't create glfw window! Exiting..\n");
+	glfwWindow = glfwCreateWindow(1280, 720, "Texture Viewer", nullptr, nullptr);
+	if (glfwWindow == nullptr) {
+		errprintf("Couldn't create glfw glfwWindow! Exiting..\n");
 		glfwTerminate();
 		return 1;
 	}
@@ -592,14 +597,14 @@ int main(int argc, char** argv)
 		{ texview_icon32.width, texview_icon32.height, (unsigned char*)texview_icon32.pixel_data },
 		{ texview_icon.width, texview_icon.height, (unsigned char*)texview_icon.pixel_data }
 	};
-	glfwSetWindowIcon(window, 2, icons);
+	glfwSetWindowIcon(glfwWindow, 2, icons);
 
-	glfwMakeContextCurrent(window);
+	glfwMakeContextCurrent(glfwWindow);
 	gladLoadGL(glfwGetProcAddress);
 	glfwSwapInterval(1); // Enable vsync
 
-	glfwSetScrollCallback(window, myGLFWscrollfun);
-	glfwSetKeyCallback(window, myGLFWkeyfun);
+	glfwSetScrollCallback(glfwWindow, myGLFWscrollfun);
+	glfwSetKeyCallback(glfwWindow, myGLFWkeyfun);
 
 	if(argc > 1) {
 		LoadTexture(argv[1]);
@@ -624,30 +629,35 @@ int main(int argc, char** argv)
 	style.PopupRounding = 2.0f;
 
 	// Setup Platform/Renderer backends
-	ImGui_ImplGlfw_InitForOpenGL(window, true);
+	ImGui_ImplGlfw_InitForOpenGL(glfwWindow, true);
 	ImGui_ImplOpenGL3_Init(glsl_version);
 
-	while (!glfwWindowShouldClose(window)) {
+	while (!glfwWindowShouldClose(glfwWindow)) {
 		// Poll and handle events (inputs, window resize, etc.)
 		// You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
 		// - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
 		// - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy of the keyboard data.
 		// Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
 		glfwPollEvents();
-		if (glfwGetWindowAttrib(window, GLFW_ICONIFIED) != 0)
+		if (glfwGetWindowAttrib(glfwWindow, GLFW_ICONIFIED) != 0)
 		{
 			ImGui_ImplGlfw_Sleep(32);
 			continue;
 		}
 
-		GenericFrame(window);
+		GenericFrame(glfwWindow);
 
-		ImGuiFrame(window);
+		ImGuiFrame(glfwWindow);
 
-		glfwSwapBuffers(window);
+		glfwSwapBuffers(glfwWindow);
 	}
 
-	glfwDestroyWindow(window);
+	curTex.Clear(); // also frees opengl texture which must happen before shutdown
+
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+
+	glfwDestroyWindow(glfwWindow);
 #ifdef TV_USE_NFD
 	NFD_Quit();
 #endif

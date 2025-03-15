@@ -21,11 +21,98 @@ void Texture::Clear()
 {
 	formatName = nullptr;
 	mipLevels.clear();
+	if(glTextureHandle > 0) {
+		glDeleteTextures(1, &glTextureHandle);
+		glTextureHandle = 0;
+	}
+	if(texDataFreeFun != nullptr) {
+		texDataFreeFun( (void*)texData, texDataFreeCookie );
+		texDataFreeFun = nullptr;
+		texDataFreeCookie = 0;
+	}
+	texData = nullptr;
+
+	name.clear();
+	fileType = dataFormat = 0;
+}
+
+static const char* getGLerrorString(GLenum e)
+{
+	const char* ret = "unknown enum";
+	switch(e) {
+	#define MY_CASE(X) case X: ret = #X; break;
+
+		MY_CASE( GL_NO_ERROR )
+		MY_CASE( GL_INVALID_ENUM )
+		MY_CASE( GL_INVALID_VALUE )
+		MY_CASE( GL_INVALID_OPERATION )
+		MY_CASE( GL_INVALID_FRAMEBUFFER_OPERATION )
+		MY_CASE( GL_OUT_OF_MEMORY )
+		MY_CASE( GL_STACK_UNDERFLOW )
+		MY_CASE( GL_STACK_OVERFLOW )
+
+	#undef MY_CASE
+	}
+
+	return ret;
+}
+
+bool Texture::CreateOpenGLtexture()
+{
+	if(glTextureHandle != 0) {
+		glDeleteTextures(1, &glTextureHandle);
+		glTextureHandle = 0;
+	}
+	glGenTextures(1, &glTextureHandle);
+	glBindTexture(GL_TEXTURE_2D, glTextureHandle);
+
+	GLenum internalFormat = dataFormat;
+	int numMips = (int)mipLevels.size();
+
+	glGetError();
+	bool anySuccess = false;
+
+	for(int i=0; i<numMips; ++i) {
+		if(formatIsCompressed) {
+			glCompressedTexImage2D(GL_TEXTURE_2D, i, internalFormat,
+			                       mipLevels[i].width, mipLevels[i].height,
+			                       0, mipLevels[i].size, mipLevels[i].data);
+			GLenum e = glGetError();
+			if(e != GL_NO_ERROR) {
+				errprintf("Sending data from '%s' for mipmap level %d to the GPU with glCompressedTexImage2D() failed. "
+				          "Probably your GPU/driver doesn't support '%s' compression (glGetError() says '%s')\n",
+				          name.c_str(), i, formatName, getGLerrorString(e));
+			} else { // probably better than nothing if at least *some* mipmap level has been loaded
+				anySuccess = true;
+			}
+		} else {
+			// FIXME: for other non-compressed formats we'll need internalFormat *and* externalFormat
+			//        and maybe also type (GL_UNSIGNED_BYTE or whatever)!
+			GLenum format = GL_RGBA;
+			GLenum type = GL_UNSIGNED_BYTE;
+			glTexImage2D(GL_TEXTURE_2D, i, internalFormat, mipLevels[i].width,
+			              mipLevels[i].height, 0, format, type,
+			              mipLevels[i].data);
+			GLenum e = glGetError();
+			if(e != GL_NO_ERROR) {
+				errprintf("Sending data from '%s' for mipmap level %d to the GPU with glTexImage2D() failed. "
+				          "glGetError() says '%s'", name.c_str(), i, getGLerrorString(e));
+			} else {
+				anySuccess = true;
+			}
+		}
+	}
+
+	return anySuccess;
+}
+
+Texture::~Texture() {
 	if(texDataFreeFun != nullptr) {
 		texDataFreeFun( (void*)texData, texDataFreeCookie );
 	}
-	name.clear();
-	fileType = dataFormat = 0;
+	if(glTextureHandle > 0) {
+		glDeleteTextures(1, &glTextureHandle);
+	}
 }
 
 bool Texture::Load(const char* filename)

@@ -57,6 +57,8 @@ struct Texture {
 	uint32_t dataFormat = 0; // OpenGL internal format, like GL_COMPRESSED_RGBA_BPTC_UNORM
 	bool formatIsCompressed = false;
 
+	unsigned int glTextureHandle = 0;
+
 	// texData is freed with texDataFreeFun
 	// it's const because it should generally not be modified (might be read-only mmap)
 	const void* texData = nullptr;
@@ -70,17 +72,16 @@ struct Texture {
 	Texture(Texture&& other) : name(std::move(other.name)), formatName(other.formatName),
 		mipLevels(std::move(other.mipLevels)), fileType(other.fileType),
 		dataFormat(other.dataFormat), formatIsCompressed(other.formatIsCompressed),
+		glTextureHandle(other.glTextureHandle),
 		texData(other.texData), texDataFreeCookie(other.texDataFreeCookie),
 		texDataFreeFun(other.texDataFreeFun)
 	{
+		other.texDataFreeFun = nullptr;
+		other.glTextureHandle = 0;
 		other.Clear();
 	}
 
-	~Texture() {
-		if(texDataFreeFun != nullptr) {
-			texDataFreeFun( (void*)texData, texDataFreeCookie );
-		}
-	}
+	~Texture();
 
 	Texture& operator=(Texture&& other) {
 		Clear();
@@ -92,7 +93,9 @@ struct Texture {
 		dataFormat = other.dataFormat;
 		other.fileType = other.dataFormat = 0;
 		formatIsCompressed = other.formatIsCompressed;
-		other.formatIsCompressed = false,
+		other.formatIsCompressed = false;
+		glTextureHandle = other.glTextureHandle;
+		other.glTextureHandle = 0;
 		texData = other.texData;
 		other.texData = nullptr;
 		texDataFreeCookie = other.texDataFreeCookie;
@@ -104,6 +107,8 @@ struct Texture {
 	}
 
 	bool Load(const char* filename);
+
+	bool CreateOpenGLtexture();
 
 	void Clear();
 
