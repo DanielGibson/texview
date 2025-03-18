@@ -53,9 +53,26 @@ struct Texture {
 	std::string name;
 	const char* formatName = nullptr;
 	std::vector<MipLevel> mipLevels;
-	uint32_t fileType = 0; // TODO: some custom enum
-	uint32_t dataFormat = 0; // OpenGL internal format, like GL_COMPRESSED_RGBA_BPTC_UNORM
+	uint32_t fileType = 0; // TODO: some custom enum (for DDS, KTX, KTX2, JPG, ...)
+
+	// dataFormat is the textures OpenGL *internal* format.
+	// For compressed textures it's something like GL_COMPRESSED_RGBA_BPTC_UNORM
+	//  or GL_COMPRESSED_RGB_S3TC_DXT1_EXT
+	// For uncompressed formats it's either an unsized internal format
+	//  (GL_RED, GL_RG, GL_RGB, GL_RGBA, GL_DEPTH_STENCIL, GL_DEPTH_COMPONENT)
+	//  or a sized internal format like GL_R8, GLR8_SNORM, GL_RGB8, etc
+	//  see https://docs.gl/gl4/glTexImage2D#idp812160 (table 2)
+	//  or GL_ALPHA or GL_LUMINANCE or GL_LUMINANCE_ALPHA (though those are deprecated)
+	uint32_t dataFormat = 0;
 	bool formatIsCompressed = false;
+	// the following two are only used for uncompressed texture formats.
+	// glFormat is one of GL_RED, GL_RG, GL_RGB, GL_BGR, GL_RGBA or GL_BGRA,
+	//  all the former with _INTEGER suffix or GL_STENCIL_INDEX, GL_DEPTH_COMPONENT, GL_DEPTH_STENCIL
+	// or GL_ALPHA or GL_LUMINANCE or GL_LUMINANCE_ALPHA (though those are deprecated)
+	uint32_t glFormat = 0;
+	uint32_t glType = 0; // GL_UNSIGNED_BYTE, GL_BYTE, GL_UNSIGNED_SHORT, GL_FLOAT etc
+	// the glTexImage2D() manpage doesn't mention it, but allegedly GL_HALF_FLOAT is also accepted:
+	// https://community.khronos.org/t/loading-gl-rgba16f-to-glteximage2d/70296/4
 
 	unsigned int glTextureHandle = 0;
 
@@ -72,7 +89,7 @@ struct Texture {
 	Texture(Texture&& other) : name(std::move(other.name)), formatName(other.formatName),
 		mipLevels(std::move(other.mipLevels)), fileType(other.fileType),
 		dataFormat(other.dataFormat), formatIsCompressed(other.formatIsCompressed),
-		glTextureHandle(other.glTextureHandle),
+		glFormat(other.glFormat), glType(other.glType), glTextureHandle(other.glTextureHandle),
 		texData(other.texData), texDataFreeCookie(other.texDataFreeCookie),
 		texDataFreeFun(other.texDataFreeFun)
 	{
@@ -94,6 +111,9 @@ struct Texture {
 		other.fileType = other.dataFormat = 0;
 		formatIsCompressed = other.formatIsCompressed;
 		other.formatIsCompressed = false;
+		glFormat = other.glFormat;
+		glType = other.glType;
+		other.glFormat = other.glType = 0;
 		glTextureHandle = other.glTextureHandle;
 		other.glTextureHandle = 0;
 		texData = other.texData;

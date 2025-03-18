@@ -38,7 +38,7 @@ enum pixel_format
 	PIXEL_FMT_BC7 = PIXEL_FMT_FOURCC('B', 'C', '7', '0'),
 
 	// Non-standard formats (some of these are supported by ATI's Compressonator)
-	// their fourcc is set in dwRGBBitCount (fourcc is that of the base type)
+	// ! their fourcc is set in dwRGBBitCount (fourcc is that of the base type) !
 	PIXEL_FMT_DXT5_CCxY = PIXEL_FMT_FOURCC('C', 'C', 'x', 'Y'),
 	PIXEL_FMT_DXT5_xGxR = PIXEL_FMT_FOURCC('x', 'G', 'x', 'R'),
 	PIXEL_FMT_DXT5_xGBR = PIXEL_FMT_FOURCC('x', 'G', 'B', 'R'),
@@ -82,19 +82,63 @@ enum pixel_format
 	PIXEL_FMT_ASTC_12x10_ALT = PIXEL_FMT_FOURCC('A', 'S', '<', ':'),
 	PIXEL_FMT_ASTC_12x12_ALT = PIXEL_FMT_FOURCC('A', 'S', '<', '<'),
 
+	// I think the following are just formats used by crunch and/or bc7enc internally
+	// but not actually written to (or parsed from) DDS files
+#if 0 // commenting them out so I can use the names for other constants
 	PIXEL_FMT_R8G8B8 = PIXEL_FMT_FOURCC('R', 'G', 'B', 'x'),
 	PIXEL_FMT_L8 = PIXEL_FMT_FOURCC('L', 'x', 'x', 'x'),
 	PIXEL_FMT_A8 = PIXEL_FMT_FOURCC('x', 'x', 'x', 'A'),
 	PIXEL_FMT_A8L8 = PIXEL_FMT_FOURCC('L', 'x', 'x', 'A'),
 	PIXEL_FMT_A8R8G8B8 = PIXEL_FMT_FOURCC('R', 'G', 'B', 'A'),
+#endif
+
+	// some "legacy" FourCCs defined in the second table of
+	// https://learn.microsoft.com/en-us/windows/win32/direct3ddds/dx-graphics-dds-pguide#common-dds-file-resource-formats-and-associated-header-content
+	// (D3DFMT_FOO corresponds to PIXEL_FMT_FOO)
+	PIXEL_FMT_R8G8_B8G8 = PIXEL_FMT_FOURCC('R', 'G', 'B', 'G'),
+	PIXEL_FMT_G8R8_G8B8 = PIXEL_FMT_FOURCC('G', 'R', 'G', 'B'),
+	PIXEL_FMT_UYVY = PIXEL_FMT_FOURCC('U', 'Y', 'V', 'Y'),
+	PIXEL_FMT_YUY2 = PIXEL_FMT_FOURCC('Y', 'U', 'Y', '2'),
+
+	// furthermore, there appear to be some D3D_FMT* constants that can be set
+	// as fourcc even though they're just simple numbers.
+	// (probably because they have >32bit or use floats, so they can't be represented by the masks?)
+	// most (but not all!) of them have an equivalent DXGI format (with different
+	// values and inversed order?! like D3DFMT_A8B8G8R8 is DXGI_FORMAT_R8G8B8A8_UNORM)
+	// Apparently D3DFMT uses bit order within a little endian integer,
+	// while DXGI_FORMAT uses bit/byte order based on memory address.
+	// DX10+ DXGI_FMT docs say, at
+	// https://learn.microsoft.com/en-us/windows/win32/api/dxgiformat/ne-dxgiformat-dxgi_format#remarks
+	// "Most formats have byte-aligned components, and the components are in C-array
+	//  order (the least address comes first). For those formats that don't have
+	//  power-of-2-aligned components, the first named component is in the least-significant bits."
+	// D3D9 D3DFORMAT docs (https://learn.microsoft.com/en-us/windows/win32/direct3d9/d3dformat) say:
+	// "All formats are listed from left to right, most-significant bit to least-significant bit."
+	// "The order of the bits is from the most significant byte first, so D3DFMT_A8L8
+	//  indicates that the high byte of this 2-byte format is alpha.
+	//  D3DFMT_D16 indicates a 16-bit integer value and an application-lockable surface."
+
+	PIXEL_FMT_A16B16G16R16  = 36,  // DXGI_FORMAT_R16G16B16A16_UNORM
+	PIXEL_FMT_Q16W16V16U16  = 110, // DXGI_FORMAT_R16G16B16A16_SNORM
+	PIXEL_FMT_R16F          = 111, // DXGI_FORMAT_R16_FLOAT
+	PIXEL_FMT_G16R16F       = 112, // DXGI_FORMAT_R16G16_FLOAT
+	PIXEL_FMT_A16B16G16R16F = 113, // DXGI_FORMAT_R16G16B16A16_FLOAT
+	PIXEL_FMT_R32F          = 114, // DXGI_FORMAT_R32_FLOAT
+	PIXEL_FMT_G32R32F       = 115, // DXGI_FORMAT_R32G32_FLOAT
+	PIXEL_FMT_A32B32G32R32F = 116, // DXGI_FORMAT_R32G32B32A32_FLOAT
+	// CxV8U8: "16-bit normal compression format. The texture sampler
+	//          computes the C channel from: C = sqrt(1 - U² - V²)"
+	PIXEL_FMT_CxV8U8        = 117, // no equivalent DXGI format 
+
+	// if the DX10 FourCC is set, the actual format is defined
+	// in the optional DX10 DDS header, as a DXGI_FORMAT
+	PIXEL_FMT_DX10 = PIXEL_FMT_FOURCC('D', 'X', '1', '0'),
 };
 
 const uint32_t cDDSMaxImageDimensions = 8192U;
 
 // Total size of header is sizeof(uint32)+cDDSSizeofDDSurfaceDesc2;
 const uint32_t cDDSSizeofDDSurfaceDesc2 = 124;
-
-const uint32_t DX10fourcc = PIXEL_FMT_FOURCC('D', 'X', '1', '0');
 
 // "DDS "
 const uint32_t cDDSFileSignature = 0x20534444;
