@@ -355,8 +355,8 @@ const ASTCInfo astcFormatTable[] = {
 #undef ALT_ASTC_ENTRY
 };
 
-struct UncomprFourCCFormatInfo {
-	uint32_t ddsFourCC;
+struct UncomprFormatInfo {
+	uint32_t ddsD3Dfmt;
 	int dxgiFormat;
 
 	uint32_t glIntFormat;
@@ -370,145 +370,169 @@ struct UncomprFourCCFormatInfo {
 };
 
 // uncompressed formats that can be identified based on FOURCC or DGXI format
-const UncomprFourCCFormatInfo uncomprFourccTable[] = {
-	// TODO: what about PIXEL_FMT_R8G8_B8G8 and PIXEL_FMT_G8R8_G8B8 ?
-	// TODO: what about PIXEL_FMT_UYVY and PIXEL_FMT_YUY2 ?
+// NOTE: in this table, ddsD3Dfmt and dxgiFormat are alternatives, so match only one of them
+//       (in both cases 0 means "format doesn't exist here")
+const UncomprFormatInfo uncomprFourccTable[] = {
 
-	// using the generic internal format for now instead of the ones exactly matching the format
-	{ PIXEL_FMT_A16B16G16R16,  0, GL_RGBA/*16*/,       GL_RGBA, GL_UNSIGNED_SHORT, 64,  "RGBA16 UNORM" }, // DXGI_FORMAT_R16G16B16A16_UNORM
-	{ PIXEL_FMT_Q16W16V16U16,  0, GL_RGBA/*16_SNORM*/, GL_RGBA, GL_SHORT,          64,  "RGBA16 SNORM" }, // DXGI_FORMAT_R16G16B16A16_SNORM
-	{ PIXEL_FMT_R16F,          0, GL_RED/*R16F*/,      GL_RED,  GL_HALF_FLOAT,     16,  "Red16 FLOAT" }, // DXGI_FORMAT_R16_FLOAT - TODO: GL_HALF_FLOAT really ok as type?
-	{ PIXEL_FMT_G16R16F,       0, GL_RG,               GL_RG,   GL_HALF_FLOAT,     32,  "RG16 FLOAT" }, // DXGI_FORMAT_R16G16_FLOAT
-	{ PIXEL_FMT_A16B16G16R16F, 0, GL_RGBA,             GL_RGBA, GL_HALF_FLOAT,     64,  "RGBA16 FLOAT" }, // DXGI_FORMAT_R16G16B16A16_FLOAT
-	{ PIXEL_FMT_R32F,          0, GL_RED/*R32F*/,      GL_RED,  GL_FLOAT,          32,  "Red32 FLOAT" }, // DXGI_FORMAT_R32_FLOAT
-	{ PIXEL_FMT_G32R32F,       0, GL_RG,               GL_RG,   GL_FLOAT,          64,  "RG32 FLOAT" }, // DXGI_FORMAT_R32G32_FLOAT
-	{ PIXEL_FMT_A32B32G32R32F, 0, GL_RGBA,             GL_RGBA, GL_FLOAT,          128, "RGBA32 FLOAT" }, // DXGI_FORMAT_R32G32B32A32_FLOAT
-	// TODO: PIXEL_FMT_CxV8U8, whatever *that* is
+	// first D3DFMT_ formats that don't have a dxgi equivalent
+	{ D3DFMT_A2R10G10B10, 0,  GL_RGBA,    GL_RGBA,  GL_UNSIGNED_INT_10_10_10_2, 32, "BGR10A2 UNORM ??" },
+	// ok, the following *does* have a dxgi equivalent, but is known to be wrongly encoded in many DDS files
+	// so I have this "duplicate" entry that has a ? in the name
+	{ D3DFMT_A2B10G10R10, 0,  GL_RGBA,    GL_RGBA,  GL_UNSIGNED_INT_2_10_10_10_REV,  32, "RGB10A2 UNORM ?" },
+	{ D3DFMT_X1R5G5B5, 0,     GL_RGBA,   GL_BGRA, GL_UNSIGNED_SHORT_1_5_5_5_REV, 8, "RGB5X1 UNORM", OF_NOALPHA },
+	{ D3DFMT_X8B8G8R8, 0,     GL_RGBA,    GL_RGBA,  GL_UNSIGNED_BYTE,           32, "RGBX8 UNORM", OF_NOALPHA },
+	{ D3DFMT_R8G8B8,   0,     GL_BGR,     GL_BGR,   GL_UNSIGNED_BYTE,           24, "BGR8 UNORM" },
+	// I added D3DFMT_B8G8R8, it's non-standard. we use 220 for it (and so does Gimp), dxwrapper uses 19
+	// (no idea if anyone else uses those values and if they're actually written to any files, but why not try to support them..)
+	{ D3DFMT_B8G8R8,   0,     GL_RGB,     GL_RGB,   GL_UNSIGNED_BYTE,           24, "RGB8 UNORM" }, // gimp variant
+	{ 19,              0,     GL_RGB,     GL_RGB,   GL_UNSIGNED_BYTE,           24, "RGB8 UNORM" }, // dxwrapper variant
+	{ D3DFMT_X4R4G4B4, 0,     GL_RGBA,    GL_RGBA,  GL_UNSIGNED_SHORT_4_4_4_4,  16, "RGBX4 UNORM", OF_NOALPHA },
+	{ D3DFMT_A8L8, 0, GL_LUMINANCE_ALPHA, GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE, 16, "Luminance8 Alpha8" },
+	{ D3DFMT_L16,      0, GL_LUMINANCE, GL_LUMINANCE, GL_UNSIGNED_SHORT,        16, "Luminance16" },
+	{ D3DFMT_L8,       0, GL_LUMINANCE, GL_LUMINANCE, GL_UNSIGNED_BYTE,         8, "Luminance8" },
+
 
 	// all the DXGI formats... https://learn.microsoft.com/en-us/windows/win32/api/dxgiformat/ne-dxgiformat-dxgi_format
+	// mappings from D3DFMT: https://learn.microsoft.com/en-us/windows/win32/direct3d10/d3d10-graphics-programming-guide-resources-legacy-formats
 	// extremely helpful: https://github.khronos.org/KTX-Specification/ktxspec.v2.html#formatMapping
-	// probably also  helpful: https://gist.github.com/Kos/4739337
+	// also helpful: https://gist.github.com/Kos/4739337
 
-	{ DX10, DXGI_FORMAT_R32G32B32A32_TYPELESS, GL_RGBA, GL_RGBA_INTEGER, GL_UNSIGNED_INT,  128, "RGBA32 typeless", OF_TYPELESS }, // TODO: what type for typeless?
-	{ DX10, DXGI_FORMAT_R32G32B32A32_FLOAT,    GL_RGBA, GL_RGBA,         GL_FLOAT,         128, "RGBA32 FLOAT" },
-	{ DX10, DXGI_FORMAT_R32G32B32A32_UINT,     GL_RGBA, GL_RGBA_INTEGER, GL_UNSIGNED_INT,  128, "RGBA32 UINT" },
-	{ DX10, DXGI_FORMAT_R32G32B32A32_SINT,     GL_RGBA, GL_RGBA_INTEGER, GL_INT,           128, "RGBA32 SINT" },
+	{ 0, DXGI_FORMAT_R32G32B32A32_TYPELESS, GL_RGBA, GL_RGBA_INTEGER, GL_UNSIGNED_INT,  128, "RGBA32 typeless", OF_TYPELESS }, // TODO: what type for typeless?
+	{ D3DFMT_A32B32G32R32F,
+	     DXGI_FORMAT_R32G32B32A32_FLOAT,    GL_RGBA, GL_RGBA,         GL_FLOAT,         128, "RGBA32 FLOAT" },
+	{ 0, DXGI_FORMAT_R32G32B32A32_UINT,     GL_RGBA, GL_RGBA_INTEGER, GL_UNSIGNED_INT,  128, "RGBA32 UINT" },
+	{ 0, DXGI_FORMAT_R32G32B32A32_SINT,     GL_RGBA, GL_RGBA_INTEGER, GL_INT,           128, "RGBA32 SINT" },
 
-	{ DX10, DXGI_FORMAT_R32G32B32_TYPELESS,    GL_RGB,  GL_RGB_INTEGER,  GL_UNSIGNED_INT,   96, "RGB32 typeless", OF_TYPELESS },
-	{ DX10, DXGI_FORMAT_R32G32B32_FLOAT,       GL_RGB,  GL_RGB,          GL_FLOAT,          96, "RGB32 FLOAT" },
-	{ DX10, DXGI_FORMAT_R32G32B32_UINT,        GL_RGB,  GL_RGB_INTEGER,  GL_UNSIGNED_INT,   96, "RGB32 UINT" },
-	{ DX10, DXGI_FORMAT_R32G32B32_SINT,        GL_RGB,  GL_RGB_INTEGER,  GL_INT,            96, "RGB32 SINT" },
+	{ 0, DXGI_FORMAT_R32G32B32_TYPELESS,    GL_RGB,  GL_RGB_INTEGER,  GL_UNSIGNED_INT,   96, "RGB32 typeless", OF_TYPELESS },
+	{ 0, DXGI_FORMAT_R32G32B32_FLOAT,       GL_RGB,  GL_RGB,          GL_FLOAT,          96, "RGB32 FLOAT" },
+	{ 0, DXGI_FORMAT_R32G32B32_UINT,        GL_RGB,  GL_RGB_INTEGER,  GL_UNSIGNED_INT,   96, "RGB32 UINT" },
+	{ 0, DXGI_FORMAT_R32G32B32_SINT,        GL_RGB,  GL_RGB_INTEGER,  GL_INT,            96, "RGB32 SINT" },
 
-	{ DX10, DXGI_FORMAT_R16G16B16A16_TYPELESS, GL_RGBA, GL_RGBA_INTEGER, GL_UNSIGNED_SHORT, 64, "RGBA16 typeless", OF_TYPELESS },
-	{ DX10, DXGI_FORMAT_R16G16B16A16_FLOAT,    GL_RGBA, GL_RGBA,         GL_HALF_FLOAT,     64, "RGBA16 FLOAT" },
-	{ DX10, DXGI_FORMAT_R16G16B16A16_UNORM,    GL_RGBA, GL_RGBA,         GL_UNSIGNED_SHORT, 64, "RGBA16 UNORM" },
-	{ DX10, DXGI_FORMAT_R16G16B16A16_UINT,     GL_RGBA, GL_RGBA_INTEGER, GL_UNSIGNED_SHORT, 64, "RGBA16 UINT" },
-	{ DX10, DXGI_FORMAT_R16G16B16A16_SNORM,    GL_RGBA, GL_RGBA,         GL_SHORT,          64, "RGBA16 SNORM" },
-	{ DX10, DXGI_FORMAT_R16G16B16A16_SINT,     GL_RGBA, GL_RGBA_INTEGER, GL_SHORT,          64, "RGBA16 SINT" },
+	{ 0, DXGI_FORMAT_R16G16B16A16_TYPELESS, GL_RGBA, GL_RGBA_INTEGER, GL_UNSIGNED_SHORT, 64, "RGBA16 typeless", OF_TYPELESS },
+	{ D3DFMT_A16B16G16R16F,
+	     DXGI_FORMAT_R16G16B16A16_FLOAT,    GL_RGBA, GL_RGBA,         GL_HALF_FLOAT,     64, "RGBA16 FLOAT" },
+	{ D3DFMT_A16B16G16R16,
+	     DXGI_FORMAT_R16G16B16A16_UNORM,    GL_RGBA, GL_RGBA,         GL_UNSIGNED_SHORT, 64, "RGBA16 UNORM" },
+	{ 0, DXGI_FORMAT_R16G16B16A16_UINT,     GL_RGBA, GL_RGBA_INTEGER, GL_UNSIGNED_SHORT, 64, "RGBA16 UINT" },
+	{ D3DFMT_Q16W16V16U16,
+	     DXGI_FORMAT_R16G16B16A16_SNORM,    GL_RGBA, GL_RGBA,         GL_SHORT,          64, "RGBA16 SNORM" },
+	{ 0, DXGI_FORMAT_R16G16B16A16_SINT,     GL_RGBA, GL_RGBA_INTEGER, GL_SHORT,          64, "RGBA16 SINT" },
 
-	{ DX10, DXGI_FORMAT_R32G32_TYPELESS,       GL_RG,   GL_RG_INTEGER,   GL_UNSIGNED_INT,   64, "RG32 typeless", OF_TYPELESS },
-	{ DX10, DXGI_FORMAT_R32G32_FLOAT,          GL_RG,   GL_RG,           GL_FLOAT,          64, "RG32 FLOAT" },
-	{ DX10, DXGI_FORMAT_R32G32_UINT,           GL_RG,   GL_RG_INTEGER,   GL_UNSIGNED_INT,   64, "RG32 UINT" },
-	{ DX10, DXGI_FORMAT_R32G32_SINT,           GL_RG,   GL_RG_INTEGER,   GL_INT,            64, "RG32 SINT" },
+	{ 0, DXGI_FORMAT_R32G32_TYPELESS,       GL_RG,   GL_RG_INTEGER,   GL_UNSIGNED_INT,   64, "RG32 typeless", OF_TYPELESS },
+	{ D3DFMT_G32R32F,
+	     DXGI_FORMAT_R32G32_FLOAT,          GL_RG,   GL_RG,           GL_FLOAT,          64, "RG32 FLOAT" },
+	{ 0, DXGI_FORMAT_R32G32_UINT,           GL_RG,   GL_RG_INTEGER,   GL_UNSIGNED_INT,   64, "RG32 UINT" },
+	{ 0, DXGI_FORMAT_R32G32_SINT,           GL_RG,   GL_RG_INTEGER,   GL_INT,            64, "RG32 SINT" },
 
 	// the next one is the only useful out of the following four, I guess
-	{ DX10, DXGI_FORMAT_D32_FLOAT_S8X24_UINT,     GL_DEPTH_STENCIL, GL_DEPTH_STENCIL, GL_FLOAT_32_UNSIGNED_INT_24_8_REV, 64, "Depth32 FLOAT Stencil8 UINT" },
-	{ DX10, DXGI_FORMAT_R32G8X24_TYPELESS,        GL_DEPTH_STENCIL, GL_DEPTH_STENCIL, GL_FLOAT_32_UNSIGNED_INT_24_8_REV, 64, "R32G8X24_TYPELESS", OF_TYPELESS },
-	{ DX10, DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS, GL_DEPTH_STENCIL, GL_DEPTH_STENCIL, GL_FLOAT_32_UNSIGNED_INT_24_8_REV, 64, "R32_FLOAT_X8X24_TYPELESS", OF_TYPELESS },
-	{ DX10, DXGI_FORMAT_X32_TYPELESS_G8X24_UINT,  GL_DEPTH_STENCIL, GL_DEPTH_STENCIL, GL_FLOAT_32_UNSIGNED_INT_24_8_REV, 64, "X32_TYPELESS_G8X24_UINT", OF_TYPELESS },
+	{ 0, DXGI_FORMAT_D32_FLOAT_S8X24_UINT,     GL_DEPTH_STENCIL, GL_DEPTH_STENCIL, GL_FLOAT_32_UNSIGNED_INT_24_8_REV, 64, "Depth32 FLOAT Stencil8 UINT" },
+	{ 0, DXGI_FORMAT_R32G8X24_TYPELESS,        GL_DEPTH_STENCIL, GL_DEPTH_STENCIL, GL_FLOAT_32_UNSIGNED_INT_24_8_REV, 64, "R32G8X24_TYPELESS", OF_TYPELESS },
+	{ 0, DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS, GL_DEPTH_STENCIL, GL_DEPTH_STENCIL, GL_FLOAT_32_UNSIGNED_INT_24_8_REV, 64, "R32_FLOAT_X8X24_TYPELESS", OF_TYPELESS },
+	{ 0, DXGI_FORMAT_X32_TYPELESS_G8X24_UINT,  GL_DEPTH_STENCIL, GL_DEPTH_STENCIL, GL_FLOAT_32_UNSIGNED_INT_24_8_REV, 64, "X32_TYPELESS_G8X24_UINT", OF_TYPELESS },
 
 	// R in least significant bits, little endian order
 	// ktx2 spec says GL_RGBA and ..._REV is correct
-	{ DX10, DXGI_FORMAT_R10G10B10A2_TYPELESS, GL_RGBA, GL_RGBA_INTEGER, GL_UNSIGNED_INT_2_10_10_10_REV,  32, "RGB10A2 typeless", OF_TYPELESS },
-	// FIXME: gli/data/kueken7_rgb10a2_unorm.dds looks wrong, and it works with GL_UNSIGNED_INT_10_10_10_2,
-	//        but according to the KTX2 spec GL_UNSIGNED_INT_2_10_10_10_REV should be correct, so the image might be wrong?
-	//        => yes, also looks wrong in visual studio (same as the other gli 1010102 image)
-	{ DX10, DXGI_FORMAT_R10G10B10A2_UNORM,    GL_RGBA, GL_RGBA,         GL_UNSIGNED_INT_2_10_10_10_REV,  32, "RGB10A2 UNORM" },
-	{ DX10, DXGI_FORMAT_R10G10B10A2_UINT,     GL_RGBA, GL_RGBA_INTEGER, GL_UNSIGNED_INT_2_10_10_10_REV,  32, "RGB10A2 UINT" },
+	{ 0, DXGI_FORMAT_R10G10B10A2_TYPELESS, GL_RGBA, GL_RGBA_INTEGER, GL_UNSIGNED_INT_2_10_10_10_REV,  32, "RGB10A2 typeless", OF_TYPELESS },
+	{ 0, DXGI_FORMAT_R10G10B10A2_UNORM,    GL_RGBA, GL_RGBA,         GL_UNSIGNED_INT_2_10_10_10_REV,  32, "RGB10A2 UNORM" },
+	{ 0, DXGI_FORMAT_R10G10B10A2_UINT,     GL_RGBA, GL_RGBA_INTEGER, GL_UNSIGNED_INT_2_10_10_10_REV,  32, "RGB10A2 UINT" },
 
-	{ DX10, DXGI_FORMAT_R11G11B10_FLOAT,      GL_RGB,  GL_RGB,          GL_UNSIGNED_INT_10F_11F_11F_REV, 32, "RG11B10 FLOAT" }, //GL_R11F_G11F_B10F
+	{ 0, DXGI_FORMAT_R11G11B10_FLOAT,      GL_RGB,  GL_RGB,          GL_UNSIGNED_INT_10F_11F_11F_REV, 32, "RG11B10 FLOAT" }, //GL_R11F_G11F_B10F
 
-	{ DX10, DXGI_FORMAT_R8G8B8A8_TYPELESS,    GL_RGBA,       GL_RGBA_INTEGER, GL_UNSIGNED_BYTE,   32, "RGBA8 typeless", OF_TYPELESS },
-	{ DX10, DXGI_FORMAT_R8G8B8A8_UNORM,       GL_RGBA,       GL_RGBA,         GL_UNSIGNED_BYTE,   32, "RGBA8 UNORM" },
-	{ DX10, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,  GL_SRGB_ALPHA, GL_RGBA,         GL_UNSIGNED_BYTE,   32, "RGBA8 UNORM SRGB", OF_SRGB },
-	{ DX10, DXGI_FORMAT_R8G8B8A8_UINT,        GL_RGBA,       GL_RGBA_INTEGER, GL_UNSIGNED_BYTE,   32, "RGBA8 UINT" },
-	{ DX10, DXGI_FORMAT_R8G8B8A8_SNORM,       GL_RGBA,       GL_RGBA,         GL_BYTE,            32, "RGBA8 SNORM" },
-	{ DX10, DXGI_FORMAT_R8G8B8A8_SINT,        GL_RGBA,       GL_RGBA_INTEGER, GL_BYTE,            32, "RGBA8 SINT" },
+	{ 0, DXGI_FORMAT_R8G8B8A8_TYPELESS,    GL_RGBA,       GL_RGBA_INTEGER, GL_UNSIGNED_BYTE,   32, "RGBA8 typeless", OF_TYPELESS },
+	{ D3DFMT_A8B8G8R8,
+	     DXGI_FORMAT_R8G8B8A8_UNORM,       GL_RGBA,       GL_RGBA,         GL_UNSIGNED_BYTE,   32, "RGBA8 UNORM" },
+	{ 0, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,  GL_SRGB_ALPHA, GL_RGBA,         GL_UNSIGNED_BYTE,   32, "RGBA8 UNORM SRGB", OF_SRGB },
+	{ 0, DXGI_FORMAT_R8G8B8A8_UINT,        GL_RGBA,       GL_RGBA_INTEGER, GL_UNSIGNED_BYTE,   32, "RGBA8 UINT" },
+	{ D3DFMT_Q8W8V8U8,
+	     DXGI_FORMAT_R8G8B8A8_SNORM,       GL_RGBA,       GL_RGBA,         GL_BYTE,            32, "RGBA8 SNORM" },
+	{ 0, DXGI_FORMAT_R8G8B8A8_SINT,        GL_RGBA,       GL_RGBA_INTEGER, GL_BYTE,            32, "RGBA8 SINT" },
 
-	{ DX10, DXGI_FORMAT_R16G16_TYPELESS,      GL_RG,         GL_RG_INTEGER,   GL_UNSIGNED_SHORT,  32, "RG16 typeless", OF_TYPELESS },
-	{ DX10, DXGI_FORMAT_R16G16_FLOAT,         GL_RG,         GL_RG,           GL_HALF_FLOAT,      32, "RG16 FLOAT" },
-	{ DX10, DXGI_FORMAT_R16G16_UNORM,         GL_RG,         GL_RG,           GL_UNSIGNED_SHORT,  32, "RG16 UNORM" },
-	{ DX10, DXGI_FORMAT_R16G16_UINT,          GL_RG,         GL_RG_INTEGER,   GL_UNSIGNED_SHORT,  32, "RG16 UINT" },
-	{ DX10, DXGI_FORMAT_R16G16_SNORM,         GL_RG,         GL_RG,           GL_SHORT,           32, "RG16 SNORM" },
-	{ DX10, DXGI_FORMAT_R16G16_SINT,          GL_RG,         GL_RG_INTEGER,   GL_SHORT,           32, "RG16 UINT" },
+	{ 0, DXGI_FORMAT_R16G16_TYPELESS,      GL_RG,         GL_RG_INTEGER,   GL_UNSIGNED_SHORT,  32, "RG16 typeless", OF_TYPELESS },
+	{ D3DFMT_G16R16F,
+	     DXGI_FORMAT_R16G16_FLOAT,         GL_RG,         GL_RG,           GL_HALF_FLOAT,      32, "RG16 FLOAT" },
+	{ D3DFMT_G16R16,
+	     DXGI_FORMAT_R16G16_UNORM,         GL_RG,         GL_RG,           GL_UNSIGNED_SHORT,  32, "RG16 UNORM" },
+	{ 0, DXGI_FORMAT_R16G16_UINT,          GL_RG,         GL_RG_INTEGER,   GL_UNSIGNED_SHORT,  32, "RG16 UINT" },
+	{ 0, DXGI_FORMAT_R16G16_SNORM,         GL_RG,         GL_RG,           GL_SHORT,           32, "RG16 SNORM" },
+	{ 0, DXGI_FORMAT_R16G16_SINT,          GL_RG,         GL_RG_INTEGER,   GL_SHORT,           32, "RG16 UINT" },
 
-	{ DX10, DXGI_FORMAT_R32_TYPELESS,         GL_RED,        GL_RED_INTEGER,  GL_UNSIGNED_INT,    32, "Red32 typeless", OF_TYPELESS },
-	{ DX10, DXGI_FORMAT_D32_FLOAT,     GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_FLOAT,          32, "Depth32 FLOAT" },
-	{ DX10, DXGI_FORMAT_R32_FLOAT,            GL_RED,        GL_RED,          GL_FLOAT,           32, "Red32 FLOAT" },
-	{ DX10, DXGI_FORMAT_R32_UINT,             GL_RED,        GL_RED_INTEGER,  GL_UNSIGNED_INT,    32, "Red32 UINT" },
-	{ DX10, DXGI_FORMAT_R32_SINT,             GL_RED,        GL_RED_INTEGER,  GL_INT,             32, "Red32 SINT" },
+	{ 0, DXGI_FORMAT_R32_TYPELESS,         GL_RED,        GL_RED_INTEGER,  GL_UNSIGNED_INT,    32, "Red32 typeless", OF_TYPELESS },
+	{ D3DFMT_D32F_LOCKABLE,
+	     DXGI_FORMAT_D32_FLOAT,     GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_FLOAT,          32, "Depth32 FLOAT" },
+	{ D3DFMT_R32F, DXGI_FORMAT_R32_FLOAT,  GL_RED,        GL_RED,          GL_FLOAT,           32, "Red32 FLOAT" },
+	{ D3DFMT_INDEX32, DXGI_FORMAT_R32_UINT, GL_RED,       GL_RED_INTEGER,  GL_UNSIGNED_INT,    32, "Red32 UINT" },
+	{ 0, DXGI_FORMAT_R32_SINT,             GL_RED,        GL_RED_INTEGER,  GL_INT,             32, "Red32 SINT" },
 
 	// the next one is probably again the only useful one of the next 4
-	{ DX10, DXGI_FORMAT_D24_UNORM_S8_UINT,     GL_DEPTH_STENCIL, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 32, "Depth24 UNORM Stencil8 UINT" },
-	{ DX10, DXGI_FORMAT_R24G8_TYPELESS,        GL_DEPTH_STENCIL, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 32, "R24G8_TYPELESS", OF_TYPELESS },
-	{ DX10, DXGI_FORMAT_R24_UNORM_X8_TYPELESS, GL_DEPTH_STENCIL, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 32, "R24_UNORM_X8_TYPELESS", OF_TYPELESS },
-	{ DX10, DXGI_FORMAT_X24_TYPELESS_G8_UINT,  GL_DEPTH_STENCIL, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 32, "X24_TYPELESS_G8_UINT", OF_TYPELESS },
+	// TODO: not sure about D3DFMT_D24S8, seems like it should be called D3DFMT_S8D24 if it's equivalent to DXGI_FORMAT_D24_UNORM_S8_UINT ?
+	//       https://learn.microsoft.com/en-us/windows/win32/direct3d10/d3d10-graphics-programming-guide-resources-legacy-formats
+	//       even says that D3DFMT_S8D24 is the equivalent, but that format doesn't exist -_-
+	{ D3DFMT_D24S8,
+	     DXGI_FORMAT_D24_UNORM_S8_UINT,     GL_DEPTH_STENCIL, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 32, "Depth24 UNORM Stencil8 UINT" },
+	{ 0, DXGI_FORMAT_R24G8_TYPELESS,        GL_DEPTH_STENCIL, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 32, "R24G8_TYPELESS", OF_TYPELESS },
+	{ 0, DXGI_FORMAT_R24_UNORM_X8_TYPELESS, GL_DEPTH_STENCIL, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 32, "R24_UNORM_X8_TYPELESS", OF_TYPELESS },
+	{ 0, DXGI_FORMAT_X24_TYPELESS_G8_UINT,  GL_DEPTH_STENCIL, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 32, "X24_TYPELESS_G8_UINT", OF_TYPELESS },
 
-	{ DX10, DXGI_FORMAT_R8G8_TYPELESS,        GL_RG,         GL_RG_INTEGER,   GL_UNSIGNED_SHORT,  16, "RG8 typeless", OF_TYPELESS },
-	{ DX10, DXGI_FORMAT_R8G8_UNORM,           GL_RG,         GL_RG,           GL_UNSIGNED_SHORT,  16, "RG8 UNORM" },
-	{ DX10, DXGI_FORMAT_R8G8_UINT,            GL_RG,         GL_RG_INTEGER,   GL_UNSIGNED_SHORT,  16, "RG8 UINT" },
-	{ DX10, DXGI_FORMAT_R8G8_SNORM,           GL_RG,         GL_RG,           GL_SHORT,           16, "RG8 SNORM" },
-	{ DX10, DXGI_FORMAT_R8G8_SINT,            GL_RG,         GL_RG_INTEGER,   GL_SHORT,           16, "RG8 SINT" },
+	{ 0, DXGI_FORMAT_R8G8_TYPELESS,        GL_RG,         GL_RG_INTEGER,   GL_UNSIGNED_SHORT,  16, "RG8 typeless", OF_TYPELESS },
+	{ 0, DXGI_FORMAT_R8G8_UNORM,           GL_RG,         GL_RG,           GL_UNSIGNED_SHORT,  16, "RG8 UNORM" },
+	{ 0, DXGI_FORMAT_R8G8_UINT,            GL_RG,         GL_RG_INTEGER,   GL_UNSIGNED_SHORT,  16, "RG8 UINT" },
+	{ D3DFMT_V8U8, DXGI_FORMAT_R8G8_SNORM, GL_RG,         GL_RG,           GL_SHORT,           16, "RG8 SNORM" },
+	{ 0, DXGI_FORMAT_R8G8_SINT,            GL_RG,         GL_RG_INTEGER,   GL_SHORT,           16, "RG8 SINT" },
 
-	{ DX10, DXGI_FORMAT_R16_FLOAT,            GL_RED,        GL_RED,          GL_HALF_FLOAT,      16, "Red16 FLOAT" },
-	{ DX10, DXGI_FORMAT_D16_UNORM,    GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT,  16, "Depth16 UNORM" },
-	{ DX10, DXGI_FORMAT_R16_UNORM,           GL_RED,         GL_RED,          GL_UNSIGNED_SHORT,  16, "Red16 UNORM" },
+	{ D3DFMT_R16F, DXGI_FORMAT_R16_FLOAT,  GL_RED,        GL_RED,          GL_HALF_FLOAT,      16, "Red16 FLOAT" },
+	{ D3DFMT_D16, DXGI_FORMAT_D16_UNORM, GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT,  16, "Depth16 UNORM" },
+	{ 0, DXGI_FORMAT_R16_UNORM,            GL_RED,         GL_RED,          GL_UNSIGNED_SHORT,  16, "Red16 UNORM" },
 	// TODO: gli/data/kueken7_r16_unorm.dds (which is really UINT) is black
 	// FIXME: apparently for (all?) _INTEGER formats one needs to use a sized type as internal format
-	{ DX10, DXGI_FORMAT_R16_UINT,            GL_R16UI,       GL_RED_INTEGER,  GL_UNSIGNED_SHORT,  16, "Red16 UINT" },
-	{ DX10, DXGI_FORMAT_R16_SNORM,           GL_RED,         GL_RED,          GL_SHORT,           16, "Red16 SNORM" },
-	{ DX10, DXGI_FORMAT_R16_SINT,            GL_RED,         GL_RED_INTEGER,  GL_SHORT,           16, "Red16 SINT" },
+	{ D3DFMT_INDEX16, DXGI_FORMAT_R16_UINT, GL_R16UI,     GL_RED_INTEGER,  GL_UNSIGNED_SHORT,  16, "Red16 UINT" },
+	{ 0, DXGI_FORMAT_R16_SNORM,           GL_RED,         GL_RED,          GL_SHORT,           16, "Red16 SNORM" },
+	{ 0, DXGI_FORMAT_R16_SINT,            GL_RED,         GL_RED_INTEGER,  GL_SHORT,           16, "Red16 SINT" },
 
-	{ DX10, DXGI_FORMAT_R8_TYPELESS,         GL_RED,        GL_RED_INTEGER,   GL_UNSIGNED_BYTE,    8, "Red8 typeless", OF_TYPELESS },
-	{ DX10, DXGI_FORMAT_R8_UNORM,            GL_RED,        GL_RED,           GL_UNSIGNED_BYTE,    8, "Red8 UNORM" },
+	{ 0, DXGI_FORMAT_R8_TYPELESS,         GL_RED,        GL_RED_INTEGER,   GL_UNSIGNED_BYTE,    8, "Red8 typeless", OF_TYPELESS },
+	{ 0, DXGI_FORMAT_R8_UNORM,            GL_RED,        GL_RED,           GL_UNSIGNED_BYTE,    8, "Red8 UNORM" },
 	// FIXME: looks like I have to use the sized internal formats after all? at least for some formats?
 	// FIXME gli/data/kueken7_r8_uint.dds doesn't load
-	{ DX10, DXGI_FORMAT_R8_UINT,             GL_R8UI /*GL_RED*/,        GL_RED_INTEGER,   GL_UNSIGNED_BYTE,    8, "Red8 UINT" },
-	{ DX10, DXGI_FORMAT_R8_SNORM,            GL_RED,        GL_RED,           GL_BYTE,             8, "Red8 SNORM" },
-	{ DX10, DXGI_FORMAT_R8_SINT,             GL_RED,        GL_RED_INTEGER,   GL_BYTE,             8, "Red8 SINT" }, // FIXME: gli/data/kueken7_r8_sint.dds doesn't load
-	{ DX10, DXGI_FORMAT_A8_UNORM,            GL_ALPHA,      GL_ALPHA,         GL_UNSIGNED_BYTE,    8, "Alpha8 UNORM" },
+	{ 0, DXGI_FORMAT_R8_UINT,             GL_R8UI /*GL_RED*/,        GL_RED_INTEGER,   GL_UNSIGNED_BYTE,    8, "Red8 UINT" },
+	{ 0, DXGI_FORMAT_R8_SNORM,            GL_RED,        GL_RED,           GL_BYTE,             8, "Red8 SNORM" },
+	{ 0, DXGI_FORMAT_R8_SINT,             GL_RED,        GL_RED_INTEGER,   GL_BYTE,             8, "Red8 SINT" }, // FIXME: gli/data/kueken7_r8_sint.dds doesn't load
+	{ D3DFMT_A8, DXGI_FORMAT_A8_UNORM,    GL_ALPHA,      GL_ALPHA,         GL_UNSIGNED_BYTE,    8, "Alpha8 UNORM" },
 
-	// TODO: DXGI_FORMAT_R1_UNORM = 66, (1bit format?! I don't think OpenGL supports that?)
-
-	{ DX10, DXGI_FORMAT_R9G9B9E5_SHAREDEXP,  GL_RGB,        GL_RGB,   GL_UNSIGNED_INT_5_9_9_9_REV, 32, "RGB9 E5 shared exp float" },
-
-	// TODO: DXGI_FORMAT_R8G8_B8G8_UNORM (and the identical PIXEL_FMT_R8G8_B8G8)
-	// TODO: DXGI_FORMAT_G8R8_G8B8_UNORM (and the identical PIXEL_FMT_G8R8_G8B8)
+	{ 0, DXGI_FORMAT_R9G9B9E5_SHAREDEXP,  GL_RGB,        GL_RGB,   GL_UNSIGNED_INT_5_9_9_9_REV, 32, "RGB9 E5 shared exp float" },
 
 	// NOTE: the compressed BC1-BC5 formats are handled in comprFormatTable[]
 
-	{ DX10, DXGI_FORMAT_B5G6R5_UNORM,        GL_RGB,        GL_RGB,     GL_UNSIGNED_SHORT_5_6_5, 16, "RGB565 UNORM" },
-	{ DX10, DXGI_FORMAT_B5G5R5A1_UNORM,      GL_RGBA,       GL_BGRA,    GL_UNSIGNED_SHORT_1_5_5_5_REV, 16, "RGB5A1 UNORM" },
+	{ D3FMT_R5G6B5,
+	     DXGI_FORMAT_B5G6R5_UNORM,        GL_RGB,        GL_RGB,     GL_UNSIGNED_SHORT_5_6_5, 16, "RGB565 UNORM" },
+	{ D3DFMT_A1R5G5B5,
+	     DXGI_FORMAT_B5G5R5A1_UNORM,      GL_RGBA,       GL_BGRA,    GL_UNSIGNED_SHORT_1_5_5_5_REV, 16, "RGB5A1 UNORM" },
 
-	// TODO: { DX10, DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM, GL_RGBA, GL_BGRA,   GL_UNSIGNED_INT_2_10_10_10_REV, 32, "BGRA" }, ???
+	// TODO: { 0, DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM, GL_RGBA, GL_BGRA,   GL_UNSIGNED_INT_2_10_10_10_REV, 32, "BGRA" }, ???
 
-	{ DX10, DXGI_FORMAT_B8G8R8A8_UNORM,      GL_RGBA,       GL_BGRA,    GL_UNSIGNED_BYTE, 32, "BGRA8 UNORM" },
-	{ DX10, DXGI_FORMAT_B8G8R8X8_UNORM,      GL_RGBA,       GL_BGRA,    GL_UNSIGNED_BYTE, 32, "BGRX8 UNORM", OF_NOALPHA },
-	{ DX10, DXGI_FORMAT_B8G8R8A8_TYPELESS,   GL_RGBA,       GL_BGRA,    GL_UNSIGNED_BYTE, 32, "BGRA typeless (as UNORM)", OF_TYPELESS },
-	{ DX10, DXGI_FORMAT_B8G8R8A8_UNORM_SRGB, GL_SRGB_ALPHA, GL_BGRA,    GL_UNSIGNED_BYTE, 32, "BGRA8 SRGB UNORM", OF_SRGB },
-	{ DX10, DXGI_FORMAT_B8G8R8X8_TYPELESS,   GL_RGBA,       GL_BGRA,    GL_UNSIGNED_BYTE, 32, "BGRX typeless (as UNORM)", OF_TYPELESS | OF_NOALPHA },
+	{ D3DFMT_A8R8G8B8,
+	     DXGI_FORMAT_B8G8R8A8_UNORM,      GL_RGBA,       GL_BGRA,    GL_UNSIGNED_BYTE, 32, "BGRA8 UNORM" },
+	{ D3DFMT_X8R8G8B8,
+	     DXGI_FORMAT_B8G8R8X8_UNORM,      GL_RGBA,       GL_BGRA,    GL_UNSIGNED_BYTE, 32, "BGRX8 UNORM", OF_NOALPHA },
+	{ 0, DXGI_FORMAT_B8G8R8A8_TYPELESS,   GL_RGBA,       GL_BGRA,    GL_UNSIGNED_BYTE, 32, "BGRA typeless (as UNORM)", OF_TYPELESS },
+	{ 0, DXGI_FORMAT_B8G8R8A8_UNORM_SRGB, GL_SRGB_ALPHA, GL_BGRA,    GL_UNSIGNED_BYTE, 32, "BGRA8 SRGB UNORM", OF_SRGB },
+	{ 0, DXGI_FORMAT_B8G8R8X8_TYPELESS,   GL_RGBA,       GL_BGRA,    GL_UNSIGNED_BYTE, 32, "BGRX typeless (as UNORM)", OF_TYPELESS | OF_NOALPHA },
 	// FIXME: kueken7_bgr8_srgb.dds doesn't load - but VS2022 doesn't load it either (at all)
-	{ DX10, DXGI_FORMAT_B8G8R8X8_UNORM_SRGB, GL_SRGB_ALPHA, GL_BGRA,    GL_UNSIGNED_BYTE, 32, "BGRX8 SRGB UNORM", OF_NOALPHA | OF_SRGB },
+	{ 0, DXGI_FORMAT_B8G8R8X8_UNORM_SRGB, GL_SRGB_ALPHA, GL_BGRA,    GL_UNSIGNED_BYTE, 32, "BGRX8 SRGB UNORM", OF_NOALPHA | OF_SRGB },
 
 	// NOTE: the compressed BC6 and BC7 formats are handled in comprFormatTable[]
 
-	{ DX10, DXGI_FORMAT_B4G4R4A4_UNORM,  GL_RGBA/*4*/,  GL_BGRA,  GL_UNSIGNED_SHORT_4_4_4_4_REV,  16, "BGRA4" },
+	{ D3DFMT_A4R4G4B4, DXGI_FORMAT_B4G4R4A4_UNORM,  GL_RGBA/*4*/,  GL_RGBA,  GL_UNSIGNED_SHORT_4_4_4_4_REV,  16, "BGRA4" },
+
+	// TODO: DXGI_FORMAT_R1_UNORM = 66, (1bit format?! I don't think OpenGL supports that?)
+	// TODO: DXGI_FORMAT_R8G8_B8G8_UNORM (and the identical PIXEL_FMT_R8G8_B8G8)
+	// TODO: DXGI_FORMAT_G8R8_G8B8_UNORM (and the identical PIXEL_FMT_G8R8_G8B8)
 
 	// TODO: the remaining formats (DXGI_FORMAT_AYUV until DXGI_FORMAT_V408, except DXGI_FORMAT_B4G4R4A4_UNORM),
 	//       which are all YUV and similar formats for video, I think?
 };
 
-struct UncomprFormatInfo {
+enum { DDPF_RGBA = DDPF_RGB | DDPF_ALPHAPIXELS };
+
+struct MaskToDxFormat {
 	uint32_t pfFlags; // pixelformat flags that must be set
 
 	uint32_t bitsPerPixel;
@@ -517,50 +541,53 @@ struct UncomprFormatInfo {
 	uint32_t bMask;
 	uint32_t aMask;
 
-	uint32_t glIntFormat;
-	uint32_t glFormat;
-	uint32_t glType;
-
-	const char* name;
-
-	uint8_t ourFlags;
+	uint32_t pixelFmt; // D3DFMT_* / PIXEL_FMT_*
+	int dxgiFormat;
 };
-
-// shortcut for RGBA masks
-enum { DDPF_RGBA = DDPF_RGB | DDPF_ALPHAPIXELS };
 
 // https://learn.microsoft.com/en-us/windows/win32/direct3ddds/dx-graphics-dds-pguide#common-dds-file-resource-formats-and-associated-header-content
-const UncomprFormatInfo uncomprMaskTable[] = {
-	// flags    bits, red,        green,      blue,       alpha
-	{ DDPF_RGBA, 32, 0xff,        0xff00,     0xff0000,   0xff000000,   GL_RGBA,  GL_RGBA,  GL_UNSIGNED_BYTE,  "RGBA8 UNORM" },
-	{ DDPF_RGBA, 32, 0xffff,      0xffff0000, 0,          0,            GL_RG,    GL_RG,    GL_UNSIGNED_SHORT, "RG16 UNORM" },
-	{ DDPF_RGB,  32, 0xffff,      0xffff0000, 0,          0,            GL_RG,    GL_RG,    GL_UNSIGNED_SHORT, "RG16 UNORM" },
-	// https://walbourn.github.io/dds-update-and-1010102-problems/
-	{ DDPF_RGBA, 32, 0x3ff,       0xffc00,    0x3ff00000, 0,            GL_RGBA,  GL_RGBA,  GL_UNSIGNED_INT_2_10_10_10_REV, "RGB10A2 UNORM ???" }, // D3DFMT_A2B10G10R10 = DXGI_FORMAT_R10G10B10A2_UNORM
-	{ DDPF_RGBA, 32, 0x3ff,       0xffc00,    0x3ff00000, 0xc0000000,   GL_RGBA,  GL_RGBA,  GL_UNSIGNED_INT_2_10_10_10_REV, "RGB10A2 UNORM ?" },
-	// the following would be correct, but apparently broken writers (MS D3DX) used those masks for D3DFMT_A2B10G10R10
-	//{ DDPF_RGBA, 32, 0x3ff00000,  0xffc00,  0x3ff,      0xc0000000,   GL_RGBA,  GL_RGBA,  GL_UNSIGNED_INT_10_10_10_2,     "BGR10A2 UNORM ???" }, // D3DFMT_A2R10G10B10
-	{ DDPF_RGBA, 32, 0x3ff00000,  0xffc00,    0x3ff,      0xc0000000,   GL_RGBA,  GL_RGBA,  GL_UNSIGNED_INT_2_10_10_10_REV, "RGB10A2 UNORM ?" },
-	{ DDPF_RGBA, 16, 0x7c00,      0x3e0,      0x1f,       0x8000,       GL_RGBA,  GL_BGRA,  GL_UNSIGNED_SHORT_1_5_5_5_REV,  "RGB5A1 UNORM" },
-	{ DDPF_RGB,  16, 0x7c00,      0x3e0,      0x1f,       0,            GL_RGBA,  GL_BGRA,  GL_UNSIGNED_SHORT_1_5_5_5_REV,  "RGB5X1 UNORM", OF_NOALPHA },
-	{ DDPF_RGB,  16, 0xf800,      0x7e0,      0x1f,       0,            GL_RGB,   GL_RGB,   GL_UNSIGNED_SHORT_5_6_5,        "RGB565 UNORM" },
-	{ DDPF_ALPHA, 8, 0,           0,          0,          0xff,         GL_ALPHA, GL_ALPHA, GL_UNSIGNED_BYTE, "Alpha8 UNORM" },
-	{ DDPF_RGBA, 32, 0xff0000,    0xff00,     0xff,       0xff000000,   GL_BGRA,  GL_BGRA,  GL_UNSIGNED_BYTE, "BGRA8 UNORM" },
-	{ DDPF_RGB,  32, 0xff0000,    0xff00,     0xff,       0,            GL_BGRA,  GL_BGRA,  GL_UNSIGNED_BYTE, "BGRX8 UNORM", OF_NOALPHA },
-	{ DDPF_RGB,  32, 0xff,        0xff00,     0xff0000,   0,            GL_RGBA,  GL_RGBA,  GL_UNSIGNED_BYTE, "RGBX8 UNORM", OF_NOALPHA },
-	{ DDPF_RGB,  24, 0xff0000,    0xff00,     0xff,       0,            GL_BGR,   GL_BGR,   GL_UNSIGNED_BYTE, "BGR8 UNORM" },
-	{ DDPF_RGB,  24, 0xff,        0xff00,     0xff0000,   0,            GL_RGB,   GL_RGB,   GL_UNSIGNED_BYTE, "RGB8 UNORM" }, // DG: I added this one
-	{ DDPF_RGBA, 16, 0xf00,       0xf0,       0xf,        0xf000,       GL_RGBA,  GL_RGBA,  GL_UNSIGNED_SHORT_4_4_4_4, "RGBA4 UNORM" },
-	{ DDPF_RGBA, 16, 0xf00,       0xf0,       0xf,        0,            GL_RGBA,  GL_RGBA,  GL_UNSIGNED_SHORT_4_4_4_4, "RGBX4 UNORM", OF_NOALPHA },
-	// TODO: D3DFMT_A8R3G3B2 16 bits; no OpenGL equivalent - DDPF_RGBA, 16, 0xe0, 0x1c, 0x3, 0xff00
+const MaskToDxFormat maskToDxFormatTable[] = {
+	// flags    bits,  red,         green,      blue,       alpha,        D3DFMT (PIXEL_FMT, "fourcc"), DXGI format
+	{ DDPF_RGBA, 32,   0xff,        0xff00,     0xff0000,   0xff000000,   D3DFMT_A8B8G8R8,     DXGI_FORMAT_R8G8B8A8_UNORM },
+	{ DDPF_RGBA, 32,   0xffff,      0xffff0000, 0,          0,            D3DFMT_G16R16,       DXGI_FORMAT_R16G16_UNORM },
+	// yes, same as previous but without alpha bit (no idea, that's what it's like in microsofts table..)
+	{ DDPF_RGB,  32,   0xffff,      0xffff0000, 0,          0,            D3DFMT_G16R16,       DXGI_FORMAT_R16G16_UNORM },
 
-	{ DDPF_LUMINANCE, 16, 0xff,   0,          0,          0xff00,  GL_LUMINANCE_ALPHA, GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE, "Luminance8 Alpha8" },
-	{ DDPF_LUMINANCE, 16, 0xffff, 0,          0,          0,       GL_LUMINANCE,       GL_LUMINANCE,       GL_UNSIGNED_SHORT, "Luminance16" },
-	// FIXME: gli/data/kueken7_l8_unorm.dds doesn't load
-	{ DDPF_LUMINANCE,  8, 0xff,   0,          0,          0,       GL_LUMINANCE,       GL_LUMINANCE,       GL_UNSIGNED_BYTE, "Luminance8" },
-	// TODO: D3DFMT_A4L4; no OpenGL equivalent (GL_UNSIGNED_BYTE_4_4 doesn't exist)
-	//{ DDPF_LUMINANCE,  8, 0x0f,   0,          0,          0xf0,    GL_LUMINANCE_ALPHA, GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE_4_4, "Luminance8 Alpha8" },
+	// TODO masks look wrong (no alpha?) and there was something wonky about this type
+	// https://walbourn.github.io/dds-update-and-1010102-problems/
+	{ DDPF_RGBA, 32,   0x3ff,       0xffc00,    0x3ff00000, 0,            D3DFMT_A2B10G10R10,  DXGI_FORMAT_R10G10B10A2_UNORM },
+	{ DDPF_RGBA, 32,   0x3ff,       0xffc00,    0x3ff00000, 0xc0000000,   D3DFMT_A2B10G10R10,  DXGI_FORMAT_R10G10B10A2_UNORM },
+	// the following would be correct, but apparently broken writers (MS D3DX) used those masks for D3DFMT_A2B10G10R10
+	//{ DDPF_RGBA, 32, 0x3ff00000,  0xffc00,  0x3ff,      0xc0000000,   D3DFMT_A2R10G10B10, 0 },
+	{ DDPF_RGBA, 32,   0x3ff00000,  0xffc00,    0x3ff,      0xc0000000,   D3DFMT_A2B10G10R10,  DXGI_FORMAT_R10G10B10A2_UNORM }, // also treated as DXGI_FORMAT_R10G10B10A2_UNORM
+
+	{ DDPF_RGBA, 16,   0x7c00,      0x3e0,      0x1f,       0x8000,       D3DFMT_A1R5G5B5,     DXGI_FORMAT_B5G5R5A1_UNORM },
+	{ DDPF_RGB,  16,   0x7c00,      0x3e0,      0x1f,       0,            D3DFMT_X1R5G5B5,     0 },
+	{ DDPF_RGB,  16,   0xf800,      0x7e0,      0x1f,       0,            D3FMT_R5G6B5,        DXGI_FORMAT_B5G6R5_UNORM },
+	{ DDPF_ALPHA, 8,   0,           0,          0,          0xff,         D3DFMT_A8,           DXGI_FORMAT_A8_UNORM },
+	{ DDPF_RGBA, 32,   0xff0000,    0xff00,     0xff,       0xff000000,   D3DFMT_A8R8G8B8,     DXGI_FORMAT_B8G8R8A8_UNORM },
+	{ DDPF_RGB,  32,   0xff0000,    0xff00,     0xff,       0,            D3DFMT_X8R8G8B8,     DXGI_FORMAT_B8G8R8X8_UNORM },
+	{ DDPF_RGB,  32,   0xff,        0xff00,     0xff0000,   0,            D3DFMT_X8B8G8R8,     0 },
+	{ DDPF_RGB,  24,   0xff0000,    0xff00,     0xff,       0,            D3DFMT_R8G8B8,       0 },
+	// DG: I added the following; Gimp uses D3DFMT_B8G8R8 = 220; dxwrapper uses #define D3DFMT_B8G8R8 (D3DFORMAT)19
+	{ DDPF_RGB,  24,   0xff,        0xff00,     0xff0000,   0,            D3DFMT_B8G8R8,       0 }, // (non-std) D3DFMT_B8G8R8
+	{ DDPF_RGBA, 16,   0xf00,       0xf0,       0xf,        0xf000,       D3DFMT_A4R4G4B4,     0 }, // D3DFMT_A4R4G4B4
+	{ DDPF_RGBA, 16,   0xf00,       0xf0,       0xf,        0,            D3DFMT_X4R4G4B4,     0 },
+
+	{ DDPF_RGBA, 16,   0xe0,        0x1c,       0x3,        0xff00,       D3DFMT_A8R3G3B2,  0 }, // TODO: no opengl equivalent
+
+	{ DDPF_LUMINANCE, 16, 0xff,     0,          0,          0xff00,       D3DFMT_A8L8,         0 },
+	{ DDPF_LUMINANCE, 16, 0xffff,   0,          0,          0,            D3DFMT_L16,          0 },
+	// TODO: gli/data/kueken7_l8_unorm.dds doesn't load - but it *is* incomplete, even if VS2022 can display it.
+	{ DDPF_LUMINANCE,  8, 0xff,     0,          0,          0,            D3DFMT_L8,           0 },
+
+	{ DDPF_LUMINANCE,  8, 0x0f,     0,          0,          0xf0,         D3DFMT_A4L4,  0 }, // TODO: no opengl equivalent
+
+	// TODO: D3DFMT_CxV8U8, whatever *that* is
+	// TODO: what about PIXEL_FMT_R8G8_B8G8 and PIXEL_FMT_G8R8_G8B8 ?
+	// TODO: what about PIXEL_FMT_UYVY and PIXEL_FMT_YUY2 ?
 };
+
 
 static ComprFormatInfo FindComprFormat(uint32_t fourcc, int dxgiFmt, uint32_t pixelFormatFlags, uint8_t dx10misc2)
 {
@@ -585,11 +612,14 @@ static ComprFormatInfo FindComprFormat(uint32_t fourcc, int dxgiFmt, uint32_t pi
 	return ret;
 }
 
-static UncomprFourCCFormatInfo FindUncomprFourCCFormat(uint32_t fourcc, int dxgiFmt)
+static UncomprFormatInfo FindUncomprFourCCFormat(uint32_t fourcc, int dxgiFmt)
 {
-	UncomprFourCCFormatInfo ret = {};
-	for(const UncomprFourCCFormatInfo& fi : uncomprFourccTable) {
-		if(fi.ddsFourCC == fourcc && fi.dxgiFormat == dxgiFmt) {
+	if(fourcc == DX10) // this table doesn't match that.
+		fourcc = 0;
+	UncomprFormatInfo ret = {};
+	for(const UncomprFormatInfo& fi : uncomprFourccTable) {
+		if( (dxgiFmt != 0 && fi.dxgiFormat == dxgiFmt)
+		   || (fourcc != 0 && fi.ddsD3Dfmt == fourcc) ){
 			ret = fi;
 			break;
 		}
@@ -600,29 +630,31 @@ static UncomprFourCCFormatInfo FindUncomprFourCCFormat(uint32_t fourcc, int dxgi
 
 static UncomprFormatInfo FindUncomprFormat(const DDS_PIXELFORMAT& pf)
 {
-	UncomprFormatInfo ret = {};
-	for(const UncomprFormatInfo& fi : uncomprMaskTable) {
-		// FIXME: kueken7_rgba4_unorm.dds uses fourcc 26 (D3DFMT_A4R4G4B4)
-		// FIXME: kueken7_r5g6b5_unorm.dds uses fourcc 0x17 (VS and DxTex don't load it either)
-		// => add d3dFMT number to the table? or more entries to uncomprFourccTable?
+	uint32_t fourcc = 0;
+	int dxgiFmt = 0;
+	for(const MaskToDxFormat& mtd : maskToDxFormatTable) {
 		static const uint32_t flagsToCheck = DDPF_ALPHA|DDPF_ALPHAPIXELS|DDPF_RGB|DDPF_LUMINANCE;
-		if(pf.dwRGBBitCount == fi.bitsPerPixel && (pf.dwFlags & flagsToCheck) == fi.pfFlags) {
-			if((fi.pfFlags & (DDPF_ALPHAPIXELS|DDPF_ALPHA)) && fi.aMask != pf.dwRGBAlphaBitMask)
+		if(pf.dwRGBBitCount == mtd.bitsPerPixel && (pf.dwFlags & flagsToCheck) == mtd.pfFlags) {
+			if((mtd.pfFlags & (DDPF_ALPHAPIXELS|DDPF_ALPHA)) && mtd.aMask != pf.dwRGBAlphaBitMask)
 				continue;
-			if((fi.pfFlags & DDPF_LUMINANCE) && fi.rMask != pf.dwRBitMask)
+			if((mtd.pfFlags & DDPF_LUMINANCE) && mtd.rMask != pf.dwRBitMask)
 				continue;
-			if(fi.pfFlags & DDPF_RGB) {
-				if(fi.rMask != pf.dwRBitMask || fi.gMask != pf.dwGBitMask
-				   || fi.bMask != pf.dwBBitMask) {
+			if(mtd.pfFlags & DDPF_RGB) {
+				if(mtd.rMask != pf.dwRBitMask || mtd.gMask != pf.dwGBitMask
+				   || mtd.bMask != pf.dwBBitMask) {
 					continue;
 				}
 			}
 			// if we got this far, the masks must have matched
-			ret = fi;
+			fourcc = mtd.pixelFmt;
+			dxgiFmt = mtd.dxgiFormat;
 			break;
 		}
 	}
-
+	if(fourcc != 0 || dxgiFmt != 0) {
+		return FindUncomprFourCCFormat(fourcc, dxgiFmt);
+	}
+	UncomprFormatInfo ret = {0};
 	return ret;
 }
 
@@ -719,7 +751,7 @@ bool Texture::LoadDDS(MemMappedFile* mmf, const char* filename)
 	// maybe helpful generally: https://registry.khronos.org/KTX/specs/2.0/ktxspec.v2.html#formatMapping
 	ComprFormatInfo fmtInfo = {};
 	ASTCInfo astcInfo = {};
-	UncomprFourCCFormatInfo uncomprInfo = {};
+	UncomprFormatInfo uncomprInfo = {};
 	int32_t pitchTypeOrBitsPerPixel = 0; // set for everything except ASTC, see enum PitchType above
 	formatIsCompressed = false;
 	bool isASTC = false;
@@ -743,14 +775,6 @@ bool Texture::LoadDDS(MemMappedFile* mmf, const char* filename)
 	}
 	if(!isASTC) {
 		fmtInfo = FindComprFormat(fourcc, dxgiFmt, header->ddpfPixelFormat.dwFlags, dx10misc2);
-#if 0
-		if(fmtInfo.glFormat == 0) {
-			char fccstr[5] = { char(fourcc & 0xff), char((fourcc >> 8) & 0xff),
-			                   char((fourcc >> 16) & 0xff), char((fourcc >> 24) & 0xff), 0 };
-			errprintf( "Couldn't detect data format of '%s' - FourCC: 0x%x ('%s') dxgiFormat: %d\n", filename, fourcc, fccstr, dxgiFmt );
-			return false;
-		}
-#endif
 		if(fmtInfo.glFormat != 0) {
 			dataFormat = fmtInfo.glFormat;
 			formatName = fmtInfo.name;
@@ -770,18 +794,10 @@ bool Texture::LoadDDS(MemMappedFile* mmf, const char* filename)
 			// than it being a number?)
 			uncomprInfo = FindUncomprFourCCFormat(fourcc, dxgiFmt);
 		}
-		if(uncomprInfo.glFormat == 0 && (header->ddpfPixelFormat.dwFlags & DDPF_FOURCC) == 0) {
-			UncomprFormatInfo uncomprMaskInfo = FindUncomprFormat(header->ddpfPixelFormat);
-			if(uncomprMaskInfo.glFormat != 0) {
-				// store the relevant parts of the result in uncomprInfo so it can be used for both cases
-				// (though if it turns out we don't use uncomprInfo any further, just assign directly..)
-				uncomprInfo.glFormat = uncomprMaskInfo.glFormat;
-				uncomprInfo.bitsPerPixel = uncomprMaskInfo.bitsPerPixel;
-				uncomprInfo.glIntFormat = uncomprMaskInfo.glIntFormat;
-				uncomprInfo.glType = uncomprMaskInfo.glType;
-				uncomprInfo.name = uncomprMaskInfo.name;
-				uncomprInfo.ourFlags = uncomprMaskInfo.ourFlags;
-			}
+		if( uncomprInfo.glFormat == 0
+		   && (header->ddpfPixelFormat.dwFlags & (DDPF_ALPHA|DDPF_ALPHAPIXELS|DDPF_RGB|DDPF_LUMINANCE)) != 0 )
+		{
+			uncomprInfo = FindUncomprFormat(header->ddpfPixelFormat);
 		}
 
 		if(uncomprInfo.glFormat != 0) {

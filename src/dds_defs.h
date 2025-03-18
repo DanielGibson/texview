@@ -95,13 +95,21 @@ enum pixel_format
 	// some "legacy" FourCCs defined in the second table of
 	// https://learn.microsoft.com/en-us/windows/win32/direct3ddds/dx-graphics-dds-pguide#common-dds-file-resource-formats-and-associated-header-content
 	// (D3DFMT_FOO corresponds to PIXEL_FMT_FOO)
+	// they don't seem to have an opengl-equivalent
 	PIXEL_FMT_R8G8_B8G8 = PIXEL_FMT_FOURCC('R', 'G', 'B', 'G'),
 	PIXEL_FMT_G8R8_G8B8 = PIXEL_FMT_FOURCC('G', 'R', 'G', 'B'),
 	PIXEL_FMT_UYVY = PIXEL_FMT_FOURCC('U', 'Y', 'V', 'Y'),
 	PIXEL_FMT_YUY2 = PIXEL_FMT_FOURCC('Y', 'U', 'Y', '2'),
 
-	// furthermore, there appear to be some D3D_FMT* constants that can be set
+	// D3DFMT_MULTI2_ARGB8 - MultiElement texture (not compressed)
+	// https://learn.microsoft.com/en-us/windows/win32/direct3d9/multiple-element-textures
+	// no idea if this was ever used in DDS files, or only for FBOs or similar
+	PIXEL_FMT_MULTI2_ARGB8 = PIXEL_FMT_FOURCC('M','E','T','1'), // TODO?
+
+	// furthermore, there appear to be some D3DFMT_* constants that can be set
 	// as fourcc even though they're just simple numbers.
+	// to set them apart from the fourcc constants, they're called D3DFMT_*
+	// here as well, instead of PIXEL_FMT_*
 	// (probably because they have >32bit or use floats, so they can't be represented by the masks?)
 	// most (but not all!) of them have an equivalent DXGI format (with different
 	// values and inversed order?! like D3DFMT_A8B8G8R8 is DXGI_FORMAT_R8G8B8A8_UNORM)
@@ -118,17 +126,57 @@ enum pixel_format
 	//  indicates that the high byte of this 2-byte format is alpha.
 	//  D3DFMT_D16 indicates a 16-bit integer value and an application-lockable surface."
 
-	PIXEL_FMT_A16B16G16R16  = 36,  // DXGI_FORMAT_R16G16B16A16_UNORM
-	PIXEL_FMT_Q16W16V16U16  = 110, // DXGI_FORMAT_R16G16B16A16_SNORM
-	PIXEL_FMT_R16F          = 111, // DXGI_FORMAT_R16_FLOAT
-	PIXEL_FMT_G16R16F       = 112, // DXGI_FORMAT_R16G16_FLOAT
-	PIXEL_FMT_A16B16G16R16F = 113, // DXGI_FORMAT_R16G16B16A16_FLOAT
-	PIXEL_FMT_R32F          = 114, // DXGI_FORMAT_R32_FLOAT
-	PIXEL_FMT_G32R32F       = 115, // DXGI_FORMAT_R32G32_FLOAT
-	PIXEL_FMT_A32B32G32R32F = 116, // DXGI_FORMAT_R32G32B32A32_FLOAT
+	D3DFMT_A16B16G16R16  = 36,  // DXGI_FORMAT_R16G16B16A16_UNORM
+	D3DFMT_Q16W16V16U16  = 110, // DXGI_FORMAT_R16G16B16A16_SNORM
+	D3DFMT_R16F          = 111, // DXGI_FORMAT_R16_FLOAT
+	D3DFMT_G16R16F       = 112, // DXGI_FORMAT_R16G16_FLOAT
+	D3DFMT_A16B16G16R16F = 113, // DXGI_FORMAT_R16G16B16A16_FLOAT
+	D3DFMT_R32F          = 114, // DXGI_FORMAT_R32_FLOAT
+	D3DFMT_G32R32F       = 115, // DXGI_FORMAT_R32G32_FLOAT
+	D3DFMT_A32B32G32R32F = 116, // DXGI_FORMAT_R32G32B32A32_FLOAT
 	// CxV8U8: "16-bit normal compression format. The texture sampler
 	//          computes the C channel from: C = sqrt(1 - U² - V²)"
-	PIXEL_FMT_CxV8U8        = 117, // no equivalent DXGI format 
+	D3DFMT_CxV8U8        = 117, // no equivalent DXGI (or OpenGL) format
+
+	// .. and other D3DFMT_* constants that shouldn't be used but some are
+	// (at least by GLIs test data..). So let's support all D3DFMT_ that are either in this table:
+	// https://learn.microsoft.com/en-us/windows/win32/direct3ddds/dx-graphics-dds-pguide#common-dds-file-resource-formats-and-associated-header-content
+	// or have an equivalent DXGI format according to
+	// https://learn.microsoft.com/en-us/windows/win32/direct3d10/d3d10-graphics-programming-guide-resources-legacy-formats
+	D3DFMT_R8G8B8 = 20,
+	D3DFMT_A8R8G8B8 = 21,
+	D3DFMT_X8R8G8B8 = 22,
+	D3FMT_R5G6B5 = 23,
+	D3DFMT_X1R5G5B5 = 24,
+	D3DFMT_A1R5G5B5 = 25,
+	D3DFMT_A4R4G4B4 = 26,
+	D3DFMT_X4R4G4B4 = 30,
+	D3DFMT_A8 = 28,
+
+	D3DFMT_A8B8G8R8 = 32,
+	D3DFMT_X8B8G8R8 = 33,
+	D3DFMT_G16R16 = 34,
+	D3DFMT_A2B10G10R10 = 31,
+	D3DFMT_A2R10G10B10 = 35, // not really used, I think, at least not intentionally :-p
+
+	D3DFMT_L8 = 50,
+	D3DFMT_A8L8 = 51,
+	D3DFMT_L16 = 81,
+
+	D3DFMT_A8R3G3B2 = 29, // no opengl equivalent! 16 bits; DDPF_RGBA, 16, 0xe0, 0x1c, 0x3, 0xff00
+	D3DFMT_A4L4 = 52,     // no opengl equivalent! 8 bits; DDPF_LUMINANCE,  8, 0x0f, 0, 0, 0xf0
+
+	D3DFMT_V8U8 = 117,
+	D3DFMT_Q8W8V8U8 = 63,
+	D3DFMT_D16 = 80,
+	D3DFMT_INDEX16 = 101,
+	D3DFMT_INDEX32 = 102,
+	// Note: a D3DFMT_S8D24 is mentioned in "Map Direct3D 9 Formats to Direct3D 10"
+	//       table but doesn't actually exist. I hope they meant D3DFMT_D24S8...
+	D3DFMT_D24S8 = 75,
+	D3DFMT_D32F_LOCKABLE = 82,
+
+	D3DFMT_B8G8R8 = 220, // DG: non-standard; this is the constant Gimp uses, dxwrapper uses 19 instead
 
 	// if the DX10 FourCC is set, the actual format is defined
 	// in the optional DX10 DDS header, as a DXGI_FORMAT
