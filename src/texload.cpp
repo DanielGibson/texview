@@ -68,7 +68,7 @@ bool Texture::CreateOpenGLtexture()
 	glBindTexture(GL_TEXTURE_2D, glTextureHandle);
 
 	GLenum internalFormat = dataFormat;
-	int numMips = (int)mipLevels.size();
+	int numMips = GetNumMips();
 
 	glGetError();
 	bool anySuccess = false;
@@ -87,8 +87,6 @@ bool Texture::CreateOpenGLtexture()
 				anySuccess = true;
 			}
 		} else {
-			// FIXME: for other non-compressed formats we'll need internalFormat *and* externalFormat
-			//        and maybe also type (GL_UNSIGNED_BYTE or whatever)!
 			GLenum format = glFormat;
 			GLenum type = glType;
 			glTexImage2D(GL_TEXTURE_2D, i, internalFormat, mipLevels[i].width,

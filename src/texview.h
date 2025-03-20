@@ -52,7 +52,9 @@ struct Texture {
 
 	std::string name;
 	const char* formatName = nullptr;
+private:
 	std::vector<MipLevel> mipLevels;
+public:
 	uint32_t fileType = 0; // TODO: some custom enum (for DDS, KTX, KTX2, JPG, ...)
 
 	// dataFormat is the textures OpenGL *internal* format.
@@ -132,9 +134,26 @@ struct Texture {
 
 	void Clear();
 
-	void GetSize(float* w, float* h){
+	int GetNumMips() const {
+		return int(mipLevels.size());
+	}
+
+	void GetSize(float* w, float* h) const {
 		float w_ = 0, h_ = 0;
 		if(mipLevels.size() > 0) {
+			w_ = mipLevels[0].width;
+			h_ = mipLevels[0].height;
+		}
+		if(w)
+			*w = w_;
+		if(h)
+			*h = h_;
+	}
+
+	void GetMipSize(int mipLevel, float* w, float* h) const {
+		float w_ = 0, h_ = 0;
+		int numMips = GetNumMips();
+		if(numMips > 0 && mipLevel >= 0 && mipLevel < numMips) {
 			w_ = mipLevels[0].width;
 			h_ = mipLevels[0].height;
 		}

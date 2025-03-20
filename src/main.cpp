@@ -61,7 +61,7 @@ static void glfw_error_callback(int error, const char* description)
 static void SetMipmapLevel(texview::Texture& texture, GLint mipLevel, bool bindTexture = true)
 {
 	GLuint tex = texture.glTextureHandle;
-	GLint numMips = (GLint)texture.mipLevels.size();
+	GLint numMips = texture.GetNumMips();
 	if(tex == 0 || numMips == 1) {
 		return;
 	}
@@ -91,7 +91,7 @@ static void UpdateTextureFilter(bool bindTex = true)
 		glBindTexture(GL_TEXTURE_2D, glTex);
 	}
 	GLint filter = linearFilter ? GL_LINEAR : GL_NEAREST;
-	if(curTex.mipLevels.size() == 1) {
+	if(curTex.GetNumMips() == 1) {
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
 	} else {
@@ -132,7 +132,7 @@ static void LoadTexture(const char* path)
 	}
 
 	curTex.CreateOpenGLtexture();
-	int numMips = (int)curTex.mipLevels.size();
+	int numMips = curTex.GetNumMips();
 
 	UpdateTextureFilter(false);
 	if(numMips > 1) {
@@ -187,7 +187,7 @@ static void DrawTexture()
 		ImVec2 size(texW*tilesX, texH*tilesY);
 		DrawQuad(tex, -1, ImVec2(0, 0), size, ImVec2(tilesX, tilesY));
 	} else if(viewAtSameSize) {
-		int numMips = (int)tex.mipLevels.size();
+		int numMips = tex.GetNumMips();
 		if(viewMode == MIPMAPS_COMPACT) {
 			// try to have about the same with and height
 			// (but round up because more horizontally is preferable due to displays being wide)
@@ -225,7 +225,7 @@ static void DrawTexture()
 		}
 
 	} else { // don't view at same size
-		int numMips = (int)tex.mipLevels.size();
+		int numMips = tex.GetNumMips();
 		if(viewMode == MIPMAPS_COMPACT) {
 
 			bool toRight = (texW/texH <= 1.2f); // otherwise down
@@ -240,8 +240,8 @@ static void DrawTexture()
 			float posX = 0.0f;
 			float posY = 0.0f;
 			for(int i=0; i < numMips; ++i) {
-				float w = tex.mipLevels[i].width;
-				float h = tex.mipLevels[i].height;
+				float w, h;
+				tex.GetMipSize(i, &w, &h);
 				DrawQuad(tex, i, ImVec2(posX, posY), ImVec2(w, h));
 
 				if( (toRight && (i & 1) == 0)
@@ -259,8 +259,8 @@ static void DrawTexture()
 			float posX = 0.0f;
 			float posY = 0.0f;
 			for(int i=0; i < numMips; ++i) {
-				float w = tex.mipLevels[i].width;
-				float h = tex.mipLevels[i].height;
+				float w, h;
+				tex.GetMipSize(i, &w, &h);
 				DrawQuad(tex, i, ImVec2(posX, posY), ImVec2(w, h));
 				if(inRow) {
 					posX += spacingBetweenMips + w;
@@ -373,7 +373,7 @@ static void ImGuiFrame(GLFWwindow* window)
 		float tw, th;
 		curTex.GetSize(&tw, &th);
 		ImGui::Text("Texture Size: %d x %d", (int)tw, (int)th);
-		ImGui::Text("MipMap Levels: %d", (int)curTex.mipLevels.size());
+		ImGui::Text("MipMap Levels: %d", curTex.GetNumMips());
 
 		ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 		ImGui::PushItemWidth(fontWrapWidth - ImGui::CalcTextSize("View Mode  ").x);
@@ -425,7 +425,7 @@ static void ImGuiFrame(GLFWwindow* window)
 		}
 		if(vMode == SINGLE || vMode == TILED) {
 			int mipLevel = mipmapLevel;
-			int maxLevel = std::max(0, int(curTex.mipLevels.size()) - 1);
+			int maxLevel = std::max(0, curTex.GetNumMips() - 1);
 			if(maxLevel == 0) {
 				ImGui::BeginDisabled(true);
 				ImGui::SliderInt("LOD", &mipLevel, 0, 1, "0 (No Mip Maps)");
@@ -436,8 +436,10 @@ static void ImGuiFrame(GLFWwindow* window)
 				if(mipLevel >= 0) {
 					mipLevel = std::min(mipLevel, maxLevel);
 					miplevelString = miplevelStrBuf;
-					snprintf(miplevelStrBuf, sizeof(miplevelStrBuf), "%d (%dx%d)", mipLevel,
-							 curTex.mipLevels[mipLevel].width, curTex.mipLevels[mipLevel].height);
+					float w, h;
+					curTex.GetMipSize(mipLevel, &w, &h);
+					snprintf(miplevelStrBuf, sizeof(miplevelStrBuf), "%d (%dx%d)",
+					         mipLevel, (int)w, (int)h);
 				}
 				if(ImGui::SliderInt("Mip Level", &mipLevel, -1, maxLevel, miplevelString)) {
 					mipmapLevel = mipLevel;
