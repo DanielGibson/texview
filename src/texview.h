@@ -55,7 +55,8 @@ struct Texture {
 		const void* data = nullptr; // owned by Texture
 		uint32_t size = 0;
 
-		MipLevel(uint32_t w, uint32_t h, const void* data_) : width(w), height(h), data(data_)
+		MipLevel(uint32_t w, uint32_t h, const void* data_ = nullptr)
+			: width(w), height(h), data(data_)
 		{
 			size = width * height * 4;
 		}
@@ -189,6 +190,7 @@ public:
 
 private:
 	bool LoadDDS(MemMappedFile* mmf, const char* filename);
+	bool LoadKTX(MemMappedFile* mmf, const char* filename);
 };
 
 } //namespace texview

@@ -7,6 +7,8 @@
 #include <GLFW/glfw3.h>
 #include <glad/gl.h>
 
+#include <ktx.h>
+
 #ifdef TV_USE_NFD
 #include <nfd.h>
 #endif
@@ -604,6 +606,8 @@ int main(int argc, char** argv)
 	glfwMakeContextCurrent(glfwWindow);
 	gladLoadGL(glfwGetProcAddress);
 	glfwSwapInterval(1); // Enable vsync
+
+	ktxLoadOpenGL(glfwGetProcAddress);
 
 	glfwSetScrollCallback(glfwWindow, myGLFWscrollfun);
 	glfwSetKeyCallback(glfwWindow, myGLFWkeyfun);

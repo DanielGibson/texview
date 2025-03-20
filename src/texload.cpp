@@ -68,6 +68,19 @@ bool Texture::CreateOpenGLtexture()
 		glDeleteTextures(1, &glTextureHandle);
 		glTextureHandle = 0;
 	}
+	if(ktxTex != nullptr) {
+		GLenum target = 0;
+		GLenum glErr = 0;
+		KTX_error_code res = ktxTexture_GLUpload(ktxTex, &glTextureHandle, &target, &glErr);
+		if(res != KTX_SUCCESS) {
+			glTextureHandle = 0;
+			errprintf("Sending data from '%s' to the GPU with ktxTexture_GLUpload() failed. "
+			          "KTX error: %s OpenGL error: %s\n", name.c_str(), ktxErrorString(res), getGLerrorString(glErr));
+			return false;
+		}
+		return true;
+	}
+
 	glGenTextures(1, &glTextureHandle);
 	glBindTexture(GL_TEXTURE_2D, glTextureHandle);
 
@@ -145,29 +158,7 @@ bool Texture::Load(const char* filename)
 	if( mmf->length > 12 && (memcmp(mmf->data, ktx1identifier, 12) == 0
 	                         || memcmp(mmf->data, ktx2identifier, 12) == 0) )
 	{
-		ktxTexture* ktxTex = nullptr;
-		const unsigned char* data = (const unsigned char*)mmf->data;
-		ktx_error_code_e res;
-		res = ktxTexture_CreateFromMemory(data, mmf->length,
-		                       KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &ktxTex);
-
-		if(res != KTX_SUCCESS) {
-			errprintf("libktx couldn't load '%s': %s (%d)\n", filename, ktxErrorString(res), res);
-			UnloadMemMappedFile(mmf);
-			return false;
-		}
-
-		if(ktxTexture_NeedsTranscoding(ktxTex)) {
-			res = ktxTexture2_TranscodeBasis((ktxTexture2*)ktxTex, KTX_TTF_BC7_RGBA, 0);
-			if(res != KTX_SUCCESS) {
-				errprintf("libktx couldn't transcode '%s': %s (%d)\n", filename, ktxErrorString(res), res);
-				ktxTexture_Destroy(ktxTex);
-				UnloadMemMappedFile(mmf);
-				return false;
-			}
-		}
-
-		return true;
+		return LoadKTX(mmf, filename);
 	}
 
 	// some other kind of file, try throwing it at stb_image
@@ -206,6 +197,71 @@ bool Texture::Load(const char* filename)
 	UnloadMemMappedFile(mmf);
 	return false;
 }
+
+bool Texture::LoadKTX(MemMappedFile* mmf, const char* filename)
+{
+	ktxTexture* ktxTex = nullptr;
+	const unsigned char* data = (const unsigned char*)mmf->data;
+	ktx_error_code_e res;
+
+	res = ktxTexture_CreateFromMemory(data, mmf->length,
+						   KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &ktxTex);
+
+	if(res != KTX_SUCCESS) {
+		errprintf("libktx couldn't load '%s': %s (%d)\n", filename, ktxErrorString(res), res);
+		UnloadMemMappedFile(mmf);
+		return false;
+	}
+
+	ktxTexture2* ktxTex2 = nullptr;
+	if(ktxTex->classId == ktxTexture2_c) {
+		ktxTex2 = (ktxTexture2*)ktxTex;
+	}
+
+	if(ktxTexture_NeedsTranscoding(ktxTex)) {
+		res = ktxTexture2_TranscodeBasis(ktxTex2, KTX_TTF_BC7_RGBA, 0);
+		if(res != KTX_SUCCESS) {
+			errprintf("libktx couldn't transcode '%s': %s (%d)\n", filename, ktxErrorString(res), res);
+			ktxTexture_Destroy(ktxTex);
+			UnloadMemMappedFile(mmf);
+			return false;
+		}
+	}
+	name = filename;
+	formatName = "TODO KTX"; // FIXME: no idea how to get the format from libktx at all, much less as a string...
+	this->ktxTex = ktxTex;
+	fileType = FT_KTX;
+	if(ktxTex->isCompressed)
+		textureFlags |= TF_COMPRESSED;
+	if(ktxTex2 != nullptr && ktxTexture2_GetPremultipliedAlpha(ktxTex2))
+		textureFlags |= TF_PREMUL_ALPHA;
+
+	int numMips = ktxTex->numLevels;
+	int w = ktxTex->baseWidth;
+	int h = ktxTex->baseHeight;
+	for(int i=0; i<numMips; ++i) {
+		// just use dummy miplevels for easy access to the mip sizes
+		mipLevels.push_back(MipLevel(w, h));
+		w = std::max(w/2, 1);
+		h = std::max(h/2, 1);
+	}
+
+	texData = mmf;
+	texDataFreeCookie = (intptr_t)ktxTex;
+	texDataFreeFun = [](void* texData, intptr_t cookie) -> void {
+		MemMappedFile* mmf = (MemMappedFile*)texData;
+		ktxTexture* ktxTex = (ktxTexture*)(void*)cookie;
+		ktxTexture_Destroy(ktxTex);
+		UnloadMemMappedFile(mmf);
+	};
+
+	return true;
+}
+
+
+  /**********************************
+   * Rest of the file: DDS loading  *
+   *                                */
 
 static_assert(sizeof(DDS_HEADER) == 124, "DDS header somehow has wrong size");
 static_assert(sizeof(DDS_PIXELFORMAT) == 32, "DDS_PIXELFORMAT has wrong size");
