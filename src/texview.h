@@ -10,6 +10,8 @@
 // TODO: could have an error printing function that also shows message through ImGui (if that is running)
 #define errprintf(...) fprintf(stderr, __VA_ARGS__)
 
+struct ktxTexture;
+
 namespace texview {
 
 struct MemMappedFile {
@@ -29,7 +31,23 @@ extern MemMappedFile* LoadMemMappedFile(const char* filename);
 
 extern void UnloadMemMappedFile(MemMappedFile* mmf);
 
+enum TextureFlags {
+	TF_NONE         = 0,
+	TF_SRGB         = 1,
+	TF_TYPELESS     = 2,
+	TF_PREMUL_ALPHA = 4,
+	TF_COMPRESSED   = 8,
+	TF_NOALPHA      = 16, // formats that use GL_RGBA or similar, but are RGBX (or similar)
+};
+
 struct Texture {
+
+	enum FileType {
+		FT_NONE = 0,
+		FT_DDS,
+		FT_KTX, // TODO: extra case for KTX2?
+		FT_STB  // TODO: try to get actual type from stb_image
+	};
 
 	struct MipLevel {
 		uint32_t width = 0;
@@ -55,7 +73,9 @@ struct Texture {
 private:
 	std::vector<MipLevel> mipLevels;
 public:
-	uint32_t fileType = 0; // TODO: some custom enum (for DDS, KTX, KTX2, JPG, ...)
+	FileType fileType = FT_NONE;
+
+	uint32_t textureFlags = 0; // or-ed TextureFlag constants
 
 	// dataFormat is the textures OpenGL *internal* format.
 	// For compressed textures it's something like GL_COMPRESSED_RGBA_BPTC_UNORM
@@ -66,7 +86,6 @@ public:
 	//  see https://docs.gl/gl4/glTexImage2D#idp812160 (table 2)
 	//  or GL_ALPHA or GL_LUMINANCE or GL_LUMINANCE_ALPHA (though those are deprecated)
 	uint32_t dataFormat = 0;
-	bool formatIsCompressed = false;
 	// the following two are only used for uncompressed texture formats.
 	// glFormat is one of GL_RED, GL_RG, GL_RGB, GL_BGR, GL_RGBA or GL_BGRA,
 	//  all the former with _INTEGER suffix or GL_STENCIL_INDEX, GL_DEPTH_COMPONENT, GL_DEPTH_STENCIL
@@ -83,6 +102,7 @@ public:
 	const void* texData = nullptr;
 	intptr_t texDataFreeCookie = 0;
 	TexDataFreeFun texDataFreeFun = nullptr;
+	ktxTexture* ktxTex = nullptr;
 
 	Texture() = default;
 
@@ -90,13 +110,14 @@ public:
 
 	Texture(Texture&& other) : name(std::move(other.name)), formatName(other.formatName),
 		mipLevels(std::move(other.mipLevels)), fileType(other.fileType),
-		dataFormat(other.dataFormat), formatIsCompressed(other.formatIsCompressed),
+		textureFlags(other.textureFlags), dataFormat(other.dataFormat),
 		glFormat(other.glFormat), glType(other.glType), glTextureHandle(other.glTextureHandle),
 		texData(other.texData), texDataFreeCookie(other.texDataFreeCookie),
-		texDataFreeFun(other.texDataFreeFun)
+		texDataFreeFun(other.texDataFreeFun), ktxTex(other.ktxTex)
 	{
 		other.texDataFreeFun = nullptr;
 		other.glTextureHandle = 0;
+		other.ktxTex = nullptr;
 		other.Clear();
 	}
 
@@ -110,9 +131,10 @@ public:
 		mipLevels = std::move(other.mipLevels);
 		fileType = other.fileType;
 		dataFormat = other.dataFormat;
-		other.fileType = other.dataFormat = 0;
-		formatIsCompressed = other.formatIsCompressed;
-		other.formatIsCompressed = false;
+		other.fileType = FT_NONE;
+		other.dataFormat = 0;
+		textureFlags = other.textureFlags;
+		other.textureFlags = 0;
 		glFormat = other.glFormat;
 		glType = other.glType;
 		other.glFormat = other.glType = 0;
@@ -124,6 +146,8 @@ public:
 		other.texDataFreeCookie = 0;
 		texDataFreeFun = other.texDataFreeFun;
 		other.texDataFreeFun = nullptr;
+		ktxTex = other.ktxTex;
+		other.ktxTex = nullptr;
 
 		return *this;
 	}
@@ -154,8 +178,8 @@ public:
 		float w_ = 0, h_ = 0;
 		int numMips = GetNumMips();
 		if(numMips > 0 && mipLevel >= 0 && mipLevel < numMips) {
-			w_ = mipLevels[0].width;
-			h_ = mipLevels[0].height;
+			w_ = mipLevels[mipLevel].width;
+			h_ = mipLevels[mipLevel].height;
 		}
 		if(w)
 			*w = w_;

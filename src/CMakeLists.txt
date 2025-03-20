@@ -42,6 +42,13 @@ if(USE_NATIVE_FILE_DIALOG)
 	add_definitions(-DTV_USE_NFD)
 endif()
 
+##########
+## libktx
+
+# TODO: set things
+add_subdirectory(libs/ktx)
+set(sys_libs ${sys_libs} ktx_read)
+
 #####################
 ## Compiler Detection
 
