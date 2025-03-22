@@ -5,28 +5,77 @@
 
 namespace texview {
 
+// remember to free() the returned buffer!
+static wchar_t* Utf8ToUtf16(const char* str)
+{
+	int wLen = MultiByteToWideChar(CP_UTF8, 0, str, -1, nullptr, 0);
+	if (wLen <= 0) {
+		errprintf("Can't convert '%s' to wchar - maybe invalid UTF-8? GetLastError(): %d\n", str, GetLastError());
+		return nullptr;
+	}
+	wchar_t* wStr = (wchar_t*)malloc(wLen * sizeof(wchar_t));
+	MultiByteToWideChar(CP_UTF8, 0, str, -1, wStr, wLen);
+	return wStr;
+}
+
+// remember to free() the returned buffer!
+static char* Utf16ToUtf8(const wchar_t* wstr)
+{
+	int utf8Len = WideCharToMultiByte(CP_UTF8, 0, wstr, -1, NULL, 0, NULL, NULL);
+	if (utf8Len <= 0) {
+		errprintf("Error in Utf16ToUtf8()! GetLastError(): %d\n", GetLastError());
+		return nullptr;
+	}
+	char* ret = (char*)malloc(utf8Len);
+	WideCharToMultiByte(CP_UTF8, 0, wstr, -1, ret, utf8Len, NULL, NULL);
+	return ret;
+}
+
+std::string ToAbsolutePath(const char* path)
+{
+	std::string ret;
+	// on windows absolute paths start with C:\ (or D:\ or whatever)
+	// or with \\bla for network shares
+	if ( path[1] == ':' || (path[0] == '\\' && path[1] == '\\') ) {
+		// already absolute => just copy and return
+		ret = path;
+		return ret;
+	}
+	// all those allocations are ugly, but this isn't called much so who cares
+	wchar_t* pathW = Utf8ToUtf16(path);
+	// last argument should be ignored (because first is NULL), but
+	// the docs also say that 0 is an invalid value, so I pass 1...
+	wchar_t* absPathW = _wfullpath(nullptr, pathW, 1);
+	if ( absPathW == nullptr ) {
+		errprintf("ToAbsolutePath(%s): _wfullpath() failed! errno: %d\n", path, errno);
+		ret = path;
+		free(pathW);
+		return ret;
+	}
+	free(pathW);
+	pathW = nullptr;
+	char* absPath = Utf16ToUtf8(absPathW);
+	free(absPathW);
+	ret = absPath;
+	free(absPath);
+
+	return ret;
+}
+
+
 MemMappedFile* LoadMemMappedFile(const char* filename)
 {
 	HANDLE fileHandle = INVALID_HANDLE_VALUE;
 	// convert filename to WCHAR and try to open the file
 	{
-		int wLen = MultiByteToWideChar(CP_UTF8, 0, filename, -1, nullptr, 0);
-		if (wLen <= 0) {
-			errprintf("Can't convert file '%s' to wchar - maybe invalid UTF-8? GetLastError(): %d\n", filename, GetLastError());
-			return nullptr;
-		}
-
-		WCHAR* wFilename = new WCHAR[wLen];
-
-		MultiByteToWideChar(CP_UTF8, 0, filename, -1, wFilename, wLen);
-
+		WCHAR* wFilename = Utf8ToUtf16(filename);
 		fileHandle = CreateFileW(wFilename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_RANDOM_ACCESS, NULL);
 		if (fileHandle == INVALID_HANDLE_VALUE) {
 			errprintf("Couldn't open '%s'! GetLastError(): %d\n", filename, GetLastError());
-			delete[] wFilename;
+			free(wFilename);
 			return nullptr;
 		}
-		delete[] wFilename;
+		free(wFilename);
 	}
 
 	LARGE_INTEGER size = { 0 };

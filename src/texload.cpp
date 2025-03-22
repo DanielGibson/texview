@@ -135,6 +135,9 @@ bool Texture::Load(const char* filename)
 {
 	Clear();
 
+	std::string fname( ToAbsolutePath(filename) );
+	filename = fname.c_str(); // from here on filename has an absolute path.
+
 	MemMappedFile* mmf = LoadMemMappedFile(filename);
 	if(mmf == nullptr) {
 		return false;

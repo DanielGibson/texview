@@ -27,6 +27,8 @@ struct MemMappedFile {
 #endif
 };
 
+extern std::string ToAbsolutePath(const char* path);
+
 extern MemMappedFile* LoadMemMappedFile(const char* filename);
 
 extern void UnloadMemMappedFile(MemMappedFile* mmf);
