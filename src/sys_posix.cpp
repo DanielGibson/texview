@@ -11,6 +11,37 @@
 
 namespace texview {
 
+std::string ToAbsolutePath(const char* path)
+{
+	std::string ret;
+	if(path[0] == '/') {
+		// already absolute
+		ret = path;
+		return ret;
+	}
+#ifdef __APPLE__
+	// according to their manpage, macOS is stuck in the 90s
+	// and doesn't support realpath(path, NULL)
+	// see https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/realpath.3.html
+	// and https://github.com/fish-shell/fish-shell/issues/4433
+	// (maybe they have fixed this since and just haven't documented it)
+	char apBuf[PATH_MAX] = {0};
+	const char* absPath = realpath(path, apBuf);
+#else
+	char* absPath = realpath(path, nullptr);
+#endif
+	if(absPath == nullptr) {
+		errprintf("realpath(%s, NULL) failed?!\n", path);
+		ret = path;
+	} else {
+		ret = absPath;
+#ifndef __APPLE__
+		free(absPath);
+#endif
+	}
+	return ret;
+}
+
 MemMappedFile* LoadMemMappedFile(const char* filename)
 {
 	int fd = open(filename, O_RDONLY);
