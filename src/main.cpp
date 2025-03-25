@@ -564,6 +564,11 @@ static void myGLFWkeyfun(GLFWwindow* window, int key, int scancode, int action, 
 	}
 }
 
+void myGLFWwindowcontentscalefun(GLFWwindow* window, float xscale, float yscale)
+{
+	ImGui::GetIO().FontGlobalScale = std::max(xscale, yscale);
+}
+
 #ifdef _WIN32
 int my_main(int argc, char** argv) // called from WinMain() in sys_win.cpp
 #else
@@ -619,7 +624,7 @@ int main(int argc, char** argv)
 	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
-	ImGuiIO& io = ImGui::GetIO(); (void)io;
+	ImGuiIO& io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
 
 	// Setup Dear ImGui style
@@ -637,6 +642,14 @@ int main(int argc, char** argv)
 	// Setup Platform/Renderer backends
 	ImGui_ImplGlfw_InitForOpenGL(glfwWindow, true);
 	ImGui_ImplOpenGL3_Init(glsl_version);
+
+	{
+		float xscale = 1.0f;
+		float yscale = 1.0f;
+		glfwGetWindowContentScale(glfwWindow, &xscale, &yscale);
+		myGLFWwindowcontentscalefun(glfwWindow, xscale, yscale);
+		glfwSetWindowContentScaleCallback(glfwWindow, myGLFWwindowcontentscalefun);
+	}
 
 	while (!glfwWindowShouldClose(glfwWindow)) {
 		// Poll and handle events (inputs, window resize, etc.)
