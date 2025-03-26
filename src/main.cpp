@@ -41,6 +41,8 @@ static ImVec2 lastDragPos;
 
 static bool linearFilter = false;
 static int mipmapLevel = -1; // -1: auto, otherwise enforce that level
+static int overrideSRGB = -1; // -1: auto, 0: force disable, 1: force enable
+static int overrideAlpha = -1; // -1: auto, 0: force disable alpha blending, 1: force enable
 
 static enum ViewMode {
 	SINGLE,
@@ -179,6 +181,30 @@ static void DrawQuad(texview::Texture& texture, int mipLevel, ImVec2 pos, ImVec2
 static void DrawTexture()
 {
 	texview::Texture& tex = curTex;
+
+	bool enableAlphaBlend = (tex.textureFlags & texview::TF_HAS_ALPHA) != 0;
+	if(overrideAlpha != -1)
+		enableAlphaBlend = overrideAlpha;
+	if(enableAlphaBlend)
+		glEnable(GL_BLEND);
+	else
+		glDisable(GL_BLEND);
+
+	// this whole SRGB thing confuses me.. if the gl texture has an SRGB format
+	// (like GL_SRGB_ALPHA), it must have GL_FRAMEBUFFER_SRGB enabled for drawing.
+	// if it has a non-SRGB format (even if using the exact same pixeldata
+	// e.g. from stb_image!) it must have GL_FRAMEBUFFER_SRGB disabled.
+	// no idea what sense that's supposed to make (if all the information is in
+	// the texture, why is there no magic to always make it look correct?),
+	// but maybe it makes a difference when writing shaders?
+	bool enableSRGB = (tex.textureFlags & texview::TF_SRGB) != 0;
+	if(overrideSRGB != -1)
+		enableSRGB = overrideSRGB;
+	if(enableSRGB)
+		glEnable( GL_FRAMEBUFFER_SRGB );
+	else
+		glDisable( GL_FRAMEBUFFER_SRGB );
+
 	float texW, texH;
 	tex.GetSize(&texW, &texH);
 	if(viewMode == SINGLE) {
@@ -274,6 +300,8 @@ static void DrawTexture()
 			assert(0 && "unknown viewmode?!");
 		}
 	}
+
+	glDisable( GL_FRAMEBUFFER_SRGB ); // make sure it's disabled or ImGui will look wrong
 }
 
 static void GenericFrame(GLFWwindow* window)
@@ -376,6 +404,13 @@ static void ImGuiFrame(GLFWwindow* window)
 		curTex.GetSize(&tw, &th);
 		ImGui::Text("Texture Size: %d x %d", (int)tw, (int)th);
 		ImGui::Text("MipMap Levels: %d", curTex.GetNumMips());
+		const char* alphaStr = "no";
+		bool texHasAlpha = (curTex.textureFlags & texview::TF_HAS_ALPHA) != 0;
+		if(texHasAlpha) {
+			alphaStr = (curTex.textureFlags & texview::TF_PREMUL_ALPHA) ? "Premultiplied" : "Straight";
+		}
+		bool texIsSRGB = (curTex.textureFlags & texview::TF_SRGB) != 0;
+		ImGui::Text("Alpha: %s - sRGB: %s", alphaStr, texIsSRGB ? "yes" : "no");
 
 		ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 		ImGui::PushItemWidth(fontWrapWidth - ImGui::CalcTextSize("View Mode  ").x);
@@ -458,6 +493,22 @@ static void ImGuiFrame(GLFWwindow* window)
 				UpdateTextureFilter();
 			}
 		}
+
+		int srgb = overrideSRGB + 1 ; // -1 => 0 etc
+		const char* srgbStr = texIsSRGB ? "Tex Default (sRGB)\0Force Linear\0Force sRGB\0"
+		                                : "Tex Default (Linear)\0Force Linear\0Force sRGB\0";
+		if(ImGui::Combo("sRGB", &srgb, srgbStr)) {
+			overrideSRGB = srgb - 1;
+		}
+		ImGui::SetItemTooltip("Override if texture is assumed to have sRGB or Linear data");
+
+		int alpha = overrideAlpha + 1; // -1 => 0 etc
+		const char* alphaSelStr = texHasAlpha ? "Tex Default (on)\0Force Disable\0Force Enable\0"
+		                                      : "Tex Default (off)\0Force Disable\0Force Enable\0";
+		if(ImGui::Combo("Alpha", &alpha, alphaSelStr)) {
+			overrideAlpha = alpha - 1;
+		}
+		ImGui::SetItemTooltip("Enable/Disable Alpha Blending");
 
 		ImGui::Spacing(); ImGui::Spacing();
 
@@ -594,6 +645,7 @@ int main(int argc, char** argv)
 	const char* glsl_version = "#version 130";
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+	glfwWindowHint(GLFW_SRGB_CAPABLE, 1); // FIXME: this doesn't seem to make a difference visually or in behavior?!
 	//glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	glfwWindow = glfwCreateWindow(1280, 720, "Texture Viewer", nullptr, nullptr);
 	if (glfwWindow == nullptr) {

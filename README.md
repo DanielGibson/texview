@@ -14,13 +14,14 @@ Contributions are welcome, but maybe ping me first so we don't accidentally impl
 - [x] Support at least Windows and Linux (and probably similar Unix-likes)
     - [ ] maybe Mac if someone with a Mac takes care of that.
 - [x] Self-contained executable using OpenGL, [Dear ImGui](https://github.com/ocornut/imgui),
-      [GLFW3](https://www.glfw.org/), [Native File Dialog Extended](https://github.com/btzy/nativefiledialog-extended/)
-      and [stb_image.h](https://github.com/nothings/stb/blob/master/stb_image.h).  
+      [GLFW3](https://www.glfw.org/), [Native File Dialog Extended](https://github.com/btzy/nativefiledialog-extended/),
+      [libktx](https://github.com/KhronosGroup/KTX-Software/) and [stb_image.h](https://github.com/nothings/stb/blob/master/stb_image.h).  
       All statically linked (except for OpenGL, of course) and contained in this repo.
 - [x] Load some common image file formats (whatever stb_image.h supports :-p) and DDS textures
       containing BC1-7 or ASTC data
-    - [ ] Support more (esp. uncompressed) formats in DDS textures
-    - [ ] Maybe also KTX, maybe obscure formats from games like Quake2
+    - [x] Support more (esp. uncompressed) formats in DDS textures
+    - [x] Maybe also KTX
+    - [ ] maybe obscure formats from games like Quake2
 - [x] Show some basic info (format, encoding, size, ...)
 - [ ] Implement filters for filepicker so it only shows supported formats
 - [x] Support selecting mipmap level for display

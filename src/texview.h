@@ -37,7 +37,7 @@ enum TextureFlags {
 	TF_NONE         = 0,
 	TF_SRGB         = 1,
 	TF_TYPELESS     = 2,
-	TF_HAS_ALPHA    = 4, // texture has an alpha channel (doesn't mean it's actually used..)
+	TF_HAS_ALPHA    = 4, // texture has an alpha channel that might be used (e.g. RGBA, not RGBX)
 	TF_PREMUL_ALPHA = 8,
 	TF_COMPRESSED   = 16,
 
