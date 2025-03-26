@@ -37,9 +37,11 @@ enum TextureFlags {
 	TF_NONE         = 0,
 	TF_SRGB         = 1,
 	TF_TYPELESS     = 2,
-	TF_PREMUL_ALPHA = 4,
-	TF_COMPRESSED   = 8,
-	TF_NOALPHA      = 16, // formats that use GL_RGBA or similar, but are RGBX (or similar)
+	TF_HAS_ALPHA    = 4, // texture has an alpha channel (doesn't mean it's actually used..)
+	TF_PREMUL_ALPHA = 8,
+	TF_COMPRESSED   = 16,
+
+	_TF_NOALPHA     = 128, // formats that use GL_RGBA or similar, but are RGBX (or similar) - just for the format tables!
 };
 
 struct Texture {

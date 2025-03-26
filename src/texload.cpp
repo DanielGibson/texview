@@ -2,6 +2,8 @@
 #include "libs/stb_image.h"
 #include <glad/gl.h>
 
+#include "libs/dg_libktx_extra.h"
+
 #include <ktx.h>
 
 #include "texview.h"
@@ -185,6 +187,8 @@ bool Texture::Load(const char* filename)
 		dataFormat = GL_RGBA;
 		glFormat = GL_RGBA;
 		glType = GL_UNSIGNED_BYTE;
+		if(comp == STBI_rgb_alpha || comp == STBI_grey_alpha)
+			textureFlags |= TF_HAS_ALPHA;
 		formatName = "STB"; // TODO
 		texData = pix;
 		texDataFreeFun = [](void* texData, intptr_t) -> void { stbi_image_free(texData); };
@@ -231,13 +235,20 @@ bool Texture::LoadKTX(MemMappedFile* mmf, const char* filename)
 		}
 	}
 	name = filename;
-	formatName = "TODO KTX"; // FIXME: no idea how to get the format from libktx at all, much less as a string...
+	// TODO: would be nicer maybe to prepend "KTX" and maybe to use GL-like names like the DDS loader does
+	//   for that https://github.com/KhronosGroup/KTX-Specification/blob/main/formats.json could help
+	formatName = ktxTexture_GetFormatName(ktxTex);
+
 	this->ktxTex = ktxTex;
 	fileType = FT_KTX;
 	if(ktxTex->isCompressed)
 		textureFlags |= TF_COMPRESSED;
-	if(ktxTex2 != nullptr && ktxTexture2_GetPremultipliedAlpha(ktxTex2))
+	if(ktxTexture_FormatHasAlpha(ktxTex))
+		textureFlags |= TF_HAS_ALPHA;
+	else if(ktxTex2 != nullptr && ktxTexture2_GetPremultipliedAlpha(ktxTex2))
 		textureFlags |= TF_PREMUL_ALPHA;
+	if(ktxTexture_FormatIsSRGB(ktxTex))
+		textureFlags |= TF_SRGB;
 
 	int numMips = ktxTex->numLevels;
 	int w = ktxTex->baseWidth;
@@ -471,14 +482,14 @@ const UncomprFormatInfo uncomprFormatTable[] = {
 	// encoded in many DDS files so I have this "duplicate" entry that has a ? in the name
 	// (and if the dds contains DXGI_FORMAT_R10G10B10A2_UNORM it gets a name without '?')
 	{ D3DFMT_A2B10G10R10, 0,  GL_RGBA,    GL_RGBA,    GL_UNSIGNED_INT_2_10_10_10_REV,  32, "RGB10A2 UNORM ?" },
-	{ D3DFMT_X1R5G5B5, 0,     GL_RGBA,    GL_BGRA,    GL_UNSIGNED_SHORT_1_5_5_5_REV,    8, "RGB5X1 UNORM", TF_NOALPHA },
-	{ D3DFMT_X8B8G8R8, 0,     GL_RGBA,    GL_RGBA,    GL_UNSIGNED_BYTE,                32, "RGBX8 UNORM", TF_NOALPHA },
+	{ D3DFMT_X1R5G5B5, 0,     GL_RGBA,    GL_BGRA,    GL_UNSIGNED_SHORT_1_5_5_5_REV,    8, "RGB5X1 UNORM", _TF_NOALPHA },
+	{ D3DFMT_X8B8G8R8, 0,     GL_RGBA,    GL_RGBA,    GL_UNSIGNED_BYTE,                32, "RGBX8 UNORM", _TF_NOALPHA },
 	{ D3DFMT_R8G8B8,   0,     GL_BGR,     GL_BGR,     GL_UNSIGNED_BYTE,                24, "BGR8 UNORM" },
 	// I added D3DFMT_B8G8R8, it's non-standard. we use 220 for it (and so does Gimp), dxwrapper uses 19
 	// (no idea if anyone else uses those values and if they're actually written to any files, but why not try to support them..)
 	{ D3DFMT_B8G8R8,   0,     GL_RGB,     GL_RGB,     GL_UNSIGNED_BYTE,                24, "RGB8 UNORM" }, // gimp variant
 	{ 19,              0,     GL_RGB,     GL_RGB,     GL_UNSIGNED_BYTE,                24, "RGB8 UNORM" }, // dxwrapper variant
-	{ D3DFMT_X4R4G4B4, 0,     GL_RGBA,    GL_RGBA,    GL_UNSIGNED_SHORT_4_4_4_4,       16, "RGBX4 UNORM", TF_NOALPHA },
+	{ D3DFMT_X4R4G4B4, 0,     GL_RGBA,    GL_RGBA,    GL_UNSIGNED_SHORT_4_4_4_4,       16, "RGBX4 UNORM", _TF_NOALPHA },
 	{ D3DFMT_A8L8, 0,  GL_LUMINANCE_ALPHA,  GL_LUMINANCE_ALPHA,  GL_UNSIGNED_BYTE,     16, "Luminance8 Alpha8" },
 	{ D3DFMT_L16,      0, GL_LUMINANCE, GL_LUMINANCE, GL_UNSIGNED_SHORT,               16, "Luminance16" },
 	{ D3DFMT_L8,       0, GL_LUMINANCE, GL_LUMINANCE, GL_UNSIGNED_BYTE,                 8, "Luminance8" },
@@ -609,12 +620,12 @@ const UncomprFormatInfo uncomprFormatTable[] = {
 	{ D3DFMT_A8R8G8B8,
 	     DXGI_FORMAT_B8G8R8A8_UNORM,        GL_RGBA,       GL_BGRA,         GL_UNSIGNED_BYTE,   32, "BGRA8 UNORM" },
 	{ D3DFMT_X8R8G8B8,
-	     DXGI_FORMAT_B8G8R8X8_UNORM,        GL_RGBA,       GL_BGRA,         GL_UNSIGNED_BYTE,   32, "BGRX8 UNORM", TF_NOALPHA },
+	     DXGI_FORMAT_B8G8R8X8_UNORM,        GL_RGBA,       GL_BGRA,         GL_UNSIGNED_BYTE,   32, "BGRX8 UNORM", _TF_NOALPHA },
 	{ 0, DXGI_FORMAT_B8G8R8A8_TYPELESS,     GL_RGBA,       GL_BGRA,         GL_UNSIGNED_BYTE,   32, "BGRA typeless (as UNORM)", TF_TYPELESS },
 	{ 0, DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,   GL_SRGB_ALPHA, GL_BGRA,         GL_UNSIGNED_BYTE,   32, "BGRA8 SRGB UNORM", TF_SRGB },
-	{ 0, DXGI_FORMAT_B8G8R8X8_TYPELESS,     GL_RGBA,       GL_BGRA,         GL_UNSIGNED_BYTE,   32, "BGRX typeless (as UNORM)", TF_TYPELESS | TF_NOALPHA },
+	{ 0, DXGI_FORMAT_B8G8R8X8_TYPELESS,     GL_RGBA,       GL_BGRA,         GL_UNSIGNED_BYTE,   32, "BGRX typeless (as UNORM)", TF_TYPELESS | _TF_NOALPHA },
 	// FIXME: kueken7_bgr8_srgb.dds doesn't load - but VS2022 doesn't load it either (at all)
-	{ 0, DXGI_FORMAT_B8G8R8X8_UNORM_SRGB,   GL_SRGB_ALPHA, GL_BGRA,         GL_UNSIGNED_BYTE,   32, "BGRX8 SRGB UNORM", TF_NOALPHA | TF_SRGB },
+	{ 0, DXGI_FORMAT_B8G8R8X8_UNORM_SRGB,   GL_SRGB_ALPHA, GL_BGRA,         GL_UNSIGNED_BYTE,   32, "BGRX8 SRGB UNORM", _TF_NOALPHA | TF_SRGB },
 
 	// NOTE: the compressed BC6 and BC7 formats are handled in comprFormatTable[]
 
@@ -708,9 +719,6 @@ static ComprFormatInfo FindComprFormat(uint32_t fourcc, int dxgiFmt, uint32_t pi
 			break;
 		}
 	}
-
-	if(ret.dx10misc2 == DDS_DX10MISC2_ALPHA_PREMULTIPLIED)
-		ret.ourFlags |= TF_PREMUL_ALPHA;
 
 	return ret;
 }
@@ -928,6 +936,19 @@ bool Texture::LoadDDS(MemMappedFile* mmf, const char* filename)
 		return false;
 	}
 
+	if(dx10misc2 != 0) {
+		if(dx10misc2 == DDS_DX10MISC2_ALPHA_OPAQUE)
+			ourFlags |= _TF_NOALPHA;
+		else if( (ourFlags & _TF_NOALPHA) == 0
+		        && dx10misc2 == DDS_DX10MISC2_ALPHA_PREMULTIPLIED )
+			ourFlags |= TF_PREMUL_ALPHA;
+	}
+	// FIXME: also use DDPF_ALPHA(PIXELS) ?
+	if((ourFlags & _TF_NOALPHA) == 0 && dg_glInternalFormatHasAlpha(dataFormat)) {
+		ourFlags |= TF_HAS_ALPHA;
+	}
+	ourFlags &= ~_TF_NOALPHA; // clear that flag, it's only for the tables
+
 	textureFlags = ourFlags;
 
 	name = filename;
@@ -947,8 +968,8 @@ bool Texture::LoadDDS(MemMappedFile* mmf, const char* filename)
 		}
 		const unsigned char* dataNext = dataCur + mipSize;
 		if(dataNext > dataEnd) {
-			errprintf("MipMap level %d for '%s' is incomplete (file too small) mipSize: %d w: %d h: %d!\n",
-					i, filename, mipSize, mipW, mipH);
+			errprintf("MipMap level %d for '%s' is incomplete (file too small, %u bytes left, are at %u bytes from start) mipSize: %u w: %d h: %d!\n",
+					i, filename, unsigned(dataEnd - dataCur), unsigned(dataCur-data), mipSize, mipW, mipH);
 			return (i > 0); // if we loaded at least one mipmap we can display the file despite the error
 		}
 		mipLevels.push_back( MipLevel(mipW, mipH, dataCur, mipSize) );

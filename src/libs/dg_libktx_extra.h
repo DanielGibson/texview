@@ -101,6 +101,7 @@ static inline bool dg_glFormatHasAlpha(GLenum glFormat)
 		case GL_BGRA:
 		case GL_ALPHA:
 		case GL_SRGB_ALPHA:
+		case GL_SLUMINANCE_ALPHA:
 		case GL_LUMINANCE_ALPHA:
 		case GL_RGBA_INTEGER:
 		case GL_BGRA_INTEGER:
