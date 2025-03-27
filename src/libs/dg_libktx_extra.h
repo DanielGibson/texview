@@ -1,11 +1,13 @@
 /*
  * dg_libktx_extra.h
  *
- * some additional functions to get additional infos from KTX/KTX2 textures
+ * Some additional functions to get additional infos from KTX/KTX2 textures
  * and some related functions to get additional infos about OpenGL types
- * they rely on internal code from libktx!
+ * (I use those for textures *not* loaded with libktx).
  *
- * do with this whatever you want.
+ * This implementation relies on internal code from libktx!
+ *
+ * No warranty implied, otherwise you can do with this code whatever you want.
  *
  */
 
@@ -125,7 +127,7 @@ static inline bool ktxTexture_FormatHasAlpha(const ktxTexture* tex)
 	if(ktxTexture_GetOpenGLFormat(tex, NULL, &baseIntFmt, NULL, NULL)) {
 		return dg_glFormatHasAlpha(baseIntFmt);
 	}
-	return false;
+	return false; // TODO: or default to true?
 }
 
 // from ktx/lib/vkformat_str.c
@@ -145,6 +147,51 @@ static inline bool ktxTexture_FormatIsSRGB(const ktxTexture* tex)
 static const char* ktxTexture_GetFormatName(const ktxTexture* tex)
 {
 	const char* ret = "<Unknown Format>";
+	if(tex->classId == ktxTexture1_c && tex->isCompressed) {
+		// some (compressed) legacy formats from KTX1 are not supported by KTX2
+		// because they don't have an equivalent Vulkan format.
+		// see https://github.khronos.org/KTX-Specification/ktxspec.v2.html#prohibitedFormats
+		// (scroll down to "Legacy Formats"). Handling those first
+		const ktxTexture1* tex1 = (const ktxTexture1*)tex;
+		switch(tex1->glInternalformat) {
+		  #define _MY_FMTMAP(NAME, NUMBER)  case NUMBER: return #NAME;
+			// OES_compressed_paletted_texture
+			// https://registry.khronos.org/OpenGL/extensions/OES/OES_compressed_paletted_texture.txt
+			_MY_FMTMAP(PALETTE4_RGB8_OES, 0x8B90)
+			_MY_FMTMAP(PALETTE4_RGBA8_OES, 0x8B91)
+			_MY_FMTMAP(PALETTE4_R5_G6_B5_OES, 0x8B92)
+			_MY_FMTMAP(PALETTE4_RGBA4_OES, 0x8B93)
+			_MY_FMTMAP(PALETTE4_RGB5_A1_OES, 0x8B94)
+			_MY_FMTMAP(PALETTE8_RGB8_OES, 0x8B95)
+			_MY_FMTMAP(PALETTE8_RGBA8_OES, 0x8B96)
+			_MY_FMTMAP(PALETTE8_R5_G6_B5_OES, 0x8B97)
+			_MY_FMTMAP(PALETTE8_RGBA4_OES, 0x8B98)
+			_MY_FMTMAP(PALETTE8_RGB5_A1_OES, 0x8B99)
+			// AMD_compressed_3DC_texture
+			// https://registry.khronos.org/OpenGL/extensions/AMD/AMD_compressed_3DC_texture.txt
+			case 0x87F9: // 3DC_X_AMD
+				return "AMD 3Dc+ aka ATI1n (BC4/RGTC1 X)";
+			case 0x87FA: // 3DC_XY_AMD
+				return "AMD 3Dc aka ATI2n (BC5/RGTC2 YX)";
+			// AMD_compressed_ATC_texture
+			// https://registry.khronos.org/OpenGL/extensions/AMD/AMD_compressed_ATC_texture.txt
+			_MY_FMTMAP(ATC_RGB_AMD, 0x8C92)
+			_MY_FMTMAP(ATC_RGBA_EXPLICIT_ALPHA_AMD, 0x8C93)
+			_MY_FMTMAP(ATC_RGBA_INTERPOLATED_ALPHA_AMD, 0x87E)
+			// 3DFX_texture_compression_FXT1
+			// https://registry.khronos.org/OpenGL/extensions/3DFX/3DFX_texture_compression_FXT1.txt
+			_MY_FMTMAP(COMPRESSED_RGB_FXT1_3DFX, 0x86B0)
+			_MY_FMTMAP(COMPRESSED_RGBA_FXT1_3DFX, 0x86B1)
+			// EXT_texture_compression_latc
+			// https://registry.khronos.org/OpenGL/extensions/EXT/EXT_texture_compression_latc.txt
+			_MY_FMTMAP(COMPRESSED_LUMINANCE_LATC1_EXT, 0x8C70)
+			_MY_FMTMAP(COMPRESSED_SIGNED_LUMINANCE_LATC1_EXT, 0x8C71)
+			_MY_FMTMAP(COMPRESSED_LUMINANCE_ALPHA_LATC2_EXT, 0x8C72)
+			_MY_FMTMAP(COMPRESSED_SIGNED_LUMINANCE_ALPHA_LATC2_EXT, 0x8C73)
+
+		  #undef _MY_FMTMAP
+		}
+	}
 	VkFormat fmt = (VkFormat)ktxTexture_GetVkFormat(tex);
 	if(fmt != 0) {
 		const char* fmtStr = vkFormatString(fmt);
