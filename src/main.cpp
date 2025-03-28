@@ -44,6 +44,8 @@ static int mipmapLevel = -1; // -1: auto, otherwise enforce that level
 static int overrideSRGB = -1; // -1: auto, 0: force disable, 1: force enable
 static int overrideAlpha = -1; // -1: auto, 0: force disable alpha blending, 1: force enable
 
+static int cubeCrossVariant = 0; // 0-3
+
 static enum ViewMode {
 	SINGLE,
 	MIPMAPS_COMPACT,
@@ -58,6 +60,29 @@ static int numTiles[2] = {2, 2};
 static void glfw_error_callback(int error, const char* description)
 {
 	errprintf("GLFW Error: %d - %s\n", error, description);
+}
+
+static void ZoomFitToWindow(GLFWwindow* window, float tw, float th, bool isCube)
+{
+	if(isCube) {
+		// shown as cross lying on the side => 4 wide, 3 high
+		tw *= 4.0f;
+		th *= 3.0f;
+	}
+	int display_w, display_h;
+	glfwGetFramebufferSize(window, &display_w, &display_h);
+	double winW = display_w - imGuiMenuWidth;
+	double zw = winW / tw;
+	double zh = display_h / th;
+	if(zw < zh) {
+		zoomLevel = zw;
+		transX = 0;
+		transY = floor(0.5 * (display_h/zw - th));
+	} else {
+		zoomLevel = zh;
+		transX = isCube ? 0.0 : floor(0.5 * (winW/zh - tw));
+		transY = 0;
+	}
 }
 
 // mipLevel -1 = auto (let GPU choose from all levels)
@@ -148,6 +173,15 @@ static void LoadTexture(const char* path)
 		SetMipmapLevel(curTex, mipmapLevel, false);
 	}
 
+	if(curTex.IsCubemap()) {
+		float w, h;
+		curTex.GetSize(&w, &h);
+		ZoomFitToWindow(glfwWindow, w, h, true);
+		spacingBetweenMips = 0;
+	} else {
+		spacingBetweenMips = 2;
+	}
+
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
@@ -185,6 +219,14 @@ struct vec3 {
 		float vals[3];
 	};
 };
+enum CubeFaceIndex {
+	FI_XPOS = 0,
+	FI_XNEG = 1,
+	FI_YPOS = 2,
+	FI_YNEG = 3,
+	FI_ZPOS = 4,
+	FI_ZNEG = 5
+};
 
 // mipLevel -1 == use configured mipmapLevel
 static void DrawCubeQuad(texview::Texture& texture, int mipLevel, int faceIndex, ImVec2 pos, ImVec2 size, ImVec2 texCoordMax = ImVec2(1, 1), ImVec2 texCoordMin = ImVec2(0, 0))
@@ -216,42 +258,47 @@ static void DrawCubeQuad(texview::Texture& texture, int mipLevel, int faceIndex,
 		for(vec3& mc : mapCoords) {
 			vec3 tmp;
 			switch(faceIndex) {
-				case 0: // XPOS
+				case FI_XPOS:
 					tmp = (vec3){ 1.0f, -mc.y, -mc.x };
 					break;
-				case 1: // XNEG
+				case FI_XNEG:
 					tmp = (vec3){ -1.0f, -mc.y, mc.x };
 					break;
-				case 2: // YPOS
+				case FI_YPOS:
 					tmp = (vec3){ mc.x, 1.0f, mc.y };
 					break;
-				case 3: // XNEG
+				case FI_YNEG:
 					tmp = (vec3){ mc.x, -1.0f, -mc.y };
 					break;
-				case 4: // ZPOS
+				case FI_ZPOS:
 					tmp = (vec3){ mc.x, -mc.y, 1.0f };
 					break;
-				case 5: // ZNEG
+				case FI_ZNEG:
 					tmp = (vec3){ -mc.x, -mc.y, -1.0f };
 					break;
 			}
 			mc = tmp;
 		}
 
+		if(cubeCrossVariant > 0 && (faceIndex == FI_YPOS || faceIndex == FI_YNEG)) {
+			int rotationSteps = (faceIndex == FI_YPOS) ? cubeCrossVariant : (4 - cubeCrossVariant);
+			vec3 mapCoordsCopy[4];
+			for(int i=0; i<4; ++i) {
+				mapCoordsCopy[i] = mapCoords[ (i+rotationSteps) % 4 ];
+			}
+			memcpy(mapCoords, mapCoordsCopy, sizeof(mapCoords));
+		}
+
 		glBegin(GL_QUADS);
-			//glTexCoord2f(texCoordMin.x, texCoordMin.y);
 			glTexCoord3fv(mapCoords[0].vals);
 			glVertex2f(pos.x, pos.y);
 
-			//glTexCoord2f(texCoordMin.x, texCoordMax.y);
 			glTexCoord3fv(mapCoords[1].vals);
 			glVertex2f(pos.x, pos.y + size.y);
 
-			//glTexCoord2f(texCoordMax.x, texCoordMax.y);
 			glTexCoord3fv(mapCoords[2].vals);
 			glVertex2f(pos.x + size.x, pos.y + size.y);
 
-			//glTexCoord2f(texCoordMax.x, texCoordMin.y);
 			glTexCoord3fv(mapCoords[3].vals);
 			glVertex2f(pos.x + size.x, pos.y);
 		glEnd();
@@ -289,16 +336,31 @@ static void DrawTexture()
 	tex.GetSize(&texW, &texH);
 
 	if(tex.IsCubemap()) {
-		// TODO: properly integrate with view options
-		float posX = 0.0f;
-		float hOffset = texW + spacingBetweenMips;
-		for(int i=0; i < 6; ++i) {
-			// TODO: render in cross-layout and correctly rotated etc
-			if( tex.textureFlags & (texview::TF_CUBEMAP_XPOS << i) ) {
-				DrawCubeQuad(tex, -1, i, ImVec2(posX, 0.0f), ImVec2(texW, texH));
-			}
-			posX += hOffset;
+		// render it as a scandinavian-flag style cross (those "Mittelchristen"
+		//  can't decide between cross and inverted cross)
+		// Y+ is always the upper square, Y- the lower square
+		// between them are the remaining ones, by default X-, Z+, X+, Z-
+		// extra feature of this texture viewer: cycle the middle ones (e.g. Z+, X+, Z+, X-)
+		// and rotate the upper/lower ones accordingly
+
+		const float offset = texW + spacingBetweenMips; // texW = texH
+		float posX = offset;
+		float posY = 0.0f;
+		const ImVec2 size(texW, texH);
+		DrawCubeQuad(tex, -1, FI_YPOS, ImVec2(posX, posY), size);
+
+		posX = 0.0f;
+		posY += offset;
+		const int middleIndices[4] = { FI_XNEG, FI_ZPOS, FI_XPOS, FI_ZNEG };
+		for(int i=cubeCrossVariant, n=cubeCrossVariant+4; i < n; ++i) {
+			int faceIndex = middleIndices[i % 4];
+			DrawCubeQuad(tex, -1, faceIndex, ImVec2(posX, posY), size);
+			posX += offset;
 		}
+		posX = offset;
+		posY += offset;
+
+		DrawCubeQuad(tex, -1, FI_YNEG, ImVec2(posX, posY), size);
 
 		glDisable( GL_FRAMEBUFFER_SRGB ); // make sure it's disabled or ImGui will look wrong
 		return;
@@ -509,6 +571,8 @@ static void ImGuiFrame(GLFWwindow* window)
 		bool texIsSRGB = (curTex.textureFlags & texview::TF_SRGB) != 0;
 		ImGui::Text("Alpha: %s - sRGB: %s", alphaStr, texIsSRGB ? "yes" : "no");
 
+		bool isCubemap = curTex.IsCubemap(); // TODO: show in info?
+
 		ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 		ImGui::PushItemWidth(fontWrapWidth - ImGui::CalcTextSize("View Mode  ").x);
 		float zl = zoomLevel;
@@ -516,20 +580,7 @@ static void ImGuiFrame(GLFWwindow* window)
 			zoomLevel = zl;
 		}
 		if(ImGui::Button("Fit to Window")) {
-			int display_w, display_h;
-			glfwGetFramebufferSize(window, &display_w, &display_h);
-			double winW = display_w - imGuiMenuWidth;
-			double zw = winW / tw;
-			double zh = display_h / th;
-			if(zw < zh) {
-				zoomLevel = zw;
-				transX = 0;
-				transY = floor(0.5 * (display_h/zw - th));
-			} else {
-				zoomLevel = zh;
-				transX = floor(0.5 * (winW/zh - tw));
-				transY = 0;
-			}
+			ZoomFitToWindow(window, tw, th, isCubemap);
 		}
 		ImGui::SameLine();
 		if(ImGui::Button("Reset Zoom")) {
@@ -542,22 +593,28 @@ static void ImGuiFrame(GLFWwindow* window)
 		ImGui::Spacing();
 
 		int vMode = viewMode;
-		if(ImGui::Combo("View Mode", &vMode, "Single\0MipMaps Compact\0MipMaps in Row\0MipMaps in Column\0Tiled\0")) {
-			// zoom out when not single, so everything (or at least more) is on the screen
-			// TODO: do some calculation for good amount of zooming out here?
-			if(viewMode == SINGLE && vMode != SINGLE) {
-				zoomLevel *= 0.5;
-			}
-			viewMode = (ViewMode)vMode;
-		}
-		if(vMode != SINGLE && vMode != TILED) {
-			ImGui::Checkbox("Show MipMaps at same size", &viewAtSameSize);
+		if(curTex.IsCubemap()) {
+			ImGui::SliderInt("View Mode##cube", &cubeCrossVariant, 0, 3, "%d", ImGuiSliderFlags_AlwaysClamp);
+
 			ImGui::SliderInt("Spacing", &spacingBetweenMips, 0, 32, "%d pix");
-			ImGui::SetItemTooltip("Spacing between mips");
-		} else if(vMode == TILED) {
-			ImGui::InputInt2("Tiles", numTiles);
+		} else { // not cubemap
+			if(ImGui::Combo("View Mode", &vMode, "Single\0MipMaps Compact\0MipMaps in Row\0MipMaps in Column\0Tiled\0")) {
+				// zoom out when not single, so everything (or at least more) is on the screen
+				// TODO: do some calculation for good amount of zooming out here?
+				if(viewMode == SINGLE && vMode != SINGLE) {
+					zoomLevel *= 0.5;
+				}
+				viewMode = (ViewMode)vMode;
+			}
+			if(vMode != SINGLE && vMode != TILED) {
+				ImGui::Checkbox("Show MipMaps at same size", &viewAtSameSize);
+				ImGui::SliderInt("Spacing", &spacingBetweenMips, 0, 32, "%d pix");
+				ImGui::SetItemTooltip("Spacing between mips");
+			} else if(vMode == TILED) {
+				ImGui::InputInt2("Tiles", numTiles);
+			}
 		}
-		if(vMode == SINGLE || vMode == TILED) {
+		if(isCubemap || vMode == SINGLE || vMode == TILED) {
 			int mipLevel = mipmapLevel;
 			int maxLevel = std::max(0, curTex.GetNumMips() - 1);
 			if(maxLevel == 0) {
@@ -573,7 +630,7 @@ static void ImGuiFrame(GLFWwindow* window)
 					float w, h;
 					curTex.GetMipSize(mipLevel, &w, &h);
 					snprintf(miplevelStrBuf, sizeof(miplevelStrBuf), "%d (%dx%d)",
-					         mipLevel, (int)w, (int)h);
+							 mipLevel, (int)w, (int)h);
 				}
 				if(ImGui::SliderInt("Mip Level", &mipLevel, -1, maxLevel, miplevelString)) {
 					mipmapLevel = mipLevel;

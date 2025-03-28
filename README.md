@@ -20,7 +20,7 @@ Contributions are welcome, but maybe ping me first so we don't accidentally impl
 - [x] Load some common image file formats (whatever stb_image.h supports :-p) and DDS textures
       containing BC1-7 or ASTC data
     - [x] Support more (esp. uncompressed) formats in DDS textures
-    - [x] Maybe also KTX
+    - [x] Maybe also KTX and KTX2
     - [ ] maybe obscure formats from games like Quake2
 - [x] Show some basic info (format, encoding, size, ...)
 - [ ] Implement filters for filepicker so it only shows supported formats
@@ -42,7 +42,11 @@ Contributions are welcome, but maybe ping me first so we don't accidentally impl
     - [ ] If one can also navigate to `..` and subdirectories here, it could even be a full alternative to the filepicker
     - [ ] ... and it could be used to navigate archives like ZIP (that are currently not supported at all).  
           But that's more in the "maybe at some point" category
-- [ ] Support more than just 2D textures (cubemaps, texture arrays, 3D textures, 1D textures?)
+- [ ] Support more than just 2D textures
+    - [x] cubemaps
+    - [ ] texture arrays
+    - [ ] 1D textures
+    - [ ] 3D textures?
 
 **Maybe at some point:**
 
