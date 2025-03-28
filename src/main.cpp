@@ -70,7 +70,7 @@ static void SetMipmapLevel(texview::Texture& texture, GLint mipLevel, bool bindT
 		return;
 	}
 	if(bindTexture) {
-		glBindTexture(GL_TEXTURE_2D, tex);
+		glBindTexture(texture.glTarget, tex);
 	}
 
 	mipLevel = std::min(mipLevel, numMips - 1);
@@ -81,27 +81,28 @@ static void SetMipmapLevel(texview::Texture& texture, GLint mipLevel, bool bindT
 		baseLevel = 0;
 		maxLevel = numMips - 1;
 	}
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, baseLevel);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, maxLevel);
+	glTexParameteri(texture.glTarget, GL_TEXTURE_BASE_LEVEL, baseLevel);
+	glTexParameteri(texture.glTarget, GL_TEXTURE_MAX_LEVEL, maxLevel);
 }
 
 static void UpdateTextureFilter(bool bindTex = true)
 {
 	GLuint glTex = curTex.glTextureHandle;
+	GLenum target = curTex.glTarget;
 	if(glTex == 0) {
 		return;
 	}
 	if(bindTex) {
-		glBindTexture(GL_TEXTURE_2D, glTex);
+		glBindTexture(target, glTex);
 	}
 	GLint filter = linearFilter ? GL_LINEAR : GL_NEAREST;
 	if(curTex.GetNumMips() == 1) {
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+		glTexParameteri(target, GL_TEXTURE_MIN_FILTER, filter);
+		glTexParameteri(target, GL_TEXTURE_MAG_FILTER, filter);
 	} else {
 		GLint mipFilter = linearFilter ? GL_LINEAR_MIPMAP_LINEAR : GL_NEAREST_MIPMAP_NEAREST;
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, mipFilter);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+		glTexParameteri(target, GL_TEXTURE_MIN_FILTER, mipFilter);
+		glTexParameteri(target, GL_TEXTURE_MAG_FILTER, filter);
 	}
 }
 
@@ -157,8 +158,8 @@ static void DrawQuad(texview::Texture& texture, int mipLevel, ImVec2 pos, ImVec2
 	GLuint tex = texture.glTextureHandle;
 	if(tex) {
 
-		glEnable(GL_TEXTURE_2D);
-		glBindTexture(GL_TEXTURE_2D, tex);
+		glEnable(texture.glTarget);
+		glBindTexture(texture.glTarget, tex);
 
 		SetMipmapLevel(texture, (mipLevel < 0) ? mipmapLevel : mipLevel, false);
 
@@ -173,6 +174,85 @@ static void DrawQuad(texview::Texture& texture, int mipLevel, ImVec2 pos, ImVec2
 			glVertex2f(pos.x + size.x, pos.y + size.y);
 
 			glTexCoord2f(texCoordMax.x, texCoordMin.y);
+			glVertex2f(pos.x + size.x, pos.y);
+		glEnd();
+	}
+}
+
+struct vec3 {
+	union {
+		struct { float x, y, z; };
+		float vals[3];
+	};
+};
+
+// mipLevel -1 == use configured mipmapLevel
+static void DrawCubeQuad(texview::Texture& texture, int mipLevel, int faceIndex, ImVec2 pos, ImVec2 size, ImVec2 texCoordMax = ImVec2(1, 1), ImVec2 texCoordMin = ImVec2(0, 0))
+{
+	GLuint tex = texture.glTextureHandle;
+	if(tex) {
+
+		glEnable(texture.glTarget);
+		glBindTexture(texture.glTarget, tex);
+
+		SetMipmapLevel(texture, (mipLevel < 0) ? mipmapLevel : mipLevel, false);
+
+		// helpful: https://stackoverflow.com/questions/38543155/opengl-render-face-of-cube-map-to-a-quad
+
+		// scale from [0, 1] to [-1, 1]
+		texCoordMin.x = texCoordMin.x * 2.0f - 1.0f;
+		texCoordMin.y = texCoordMin.y * 2.0f - 1.0f;
+		texCoordMax.x = texCoordMax.x * 2.0f - 1.0f;
+		texCoordMax.y = texCoordMax.y * 2.0f - 1.0f;
+
+		vec3 mapCoords[4] = {
+			// initialize with x, y coordinates (or s,t or whatever)
+			{ texCoordMin.x, texCoordMin.y },
+			{ texCoordMin.x, texCoordMax.y },
+			{ texCoordMax.x, texCoordMax.y },
+			{ texCoordMax.x, texCoordMin.y }
+		};
+
+		for(vec3& mc : mapCoords) {
+			vec3 tmp;
+			switch(faceIndex) {
+				case 0: // XPOS
+					tmp = (vec3){ 1.0f, -mc.y, -mc.x };
+					break;
+				case 1: // XNEG
+					tmp = (vec3){ -1.0f, -mc.y, mc.x };
+					break;
+				case 2: // YPOS
+					tmp = (vec3){ mc.x, 1.0f, mc.y };
+					break;
+				case 3: // XNEG
+					tmp = (vec3){ mc.x, -1.0f, -mc.y };
+					break;
+				case 4: // ZPOS
+					tmp = (vec3){ mc.x, -mc.y, 1.0f };
+					break;
+				case 5: // ZNEG
+					tmp = (vec3){ -mc.x, -mc.y, -1.0f };
+					break;
+			}
+			mc = tmp;
+		}
+
+		glBegin(GL_QUADS);
+			//glTexCoord2f(texCoordMin.x, texCoordMin.y);
+			glTexCoord3fv(mapCoords[0].vals);
+			glVertex2f(pos.x, pos.y);
+
+			//glTexCoord2f(texCoordMin.x, texCoordMax.y);
+			glTexCoord3fv(mapCoords[1].vals);
+			glVertex2f(pos.x, pos.y + size.y);
+
+			//glTexCoord2f(texCoordMax.x, texCoordMax.y);
+			glTexCoord3fv(mapCoords[2].vals);
+			glVertex2f(pos.x + size.x, pos.y + size.y);
+
+			//glTexCoord2f(texCoordMax.x, texCoordMin.y);
+			glTexCoord3fv(mapCoords[3].vals);
 			glVertex2f(pos.x + size.x, pos.y);
 		glEnd();
 	}
@@ -207,6 +287,23 @@ static void DrawTexture()
 
 	float texW, texH;
 	tex.GetSize(&texW, &texH);
+
+	if(tex.IsCubemap()) {
+		// TODO: properly integrate with view options
+		float posX = 0.0f;
+		float hOffset = texW + spacingBetweenMips;
+		for(int i=0; i < 6; ++i) {
+			// TODO: render in cross-layout and correctly rotated etc
+			if( tex.textureFlags & (texview::TF_CUBEMAP_XPOS << i) ) {
+				DrawCubeQuad(tex, -1, i, ImVec2(posX, 0.0f), ImVec2(texW, texH));
+			}
+			posX += hOffset;
+		}
+
+		glDisable( GL_FRAMEBUFFER_SRGB ); // make sure it's disabled or ImGui will look wrong
+		return;
+	}
+
 	if(viewMode == SINGLE) {
 		DrawQuad(tex, -1, ImVec2(0, 0), ImVec2(texW, texH));
 	} else if(viewMode == TILED) {

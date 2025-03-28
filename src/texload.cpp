@@ -1,4 +1,4 @@
-
+#define STBI_NO_STDIO
 #include "libs/stb_image.h"
 #include <glad/gl.h>
 
@@ -24,7 +24,7 @@ namespace texview {
 void Texture::Clear()
 {
 	formatName = nullptr;
-	mipLevels.clear();
+	elements.clear();
 	if(glTextureHandle > 0) {
 		glDeleteTextures(1, &glTextureHandle);
 		glTextureHandle = 0;
@@ -34,7 +34,7 @@ void Texture::Clear()
 		texDataFreeFun = nullptr;
 		texDataFreeCookie = 0;
 	}
-	glFormat = glType = 0;
+	glFormat = glType = glTarget = 0;
 	texData = nullptr;
 
 	name.clear();
@@ -64,12 +64,47 @@ static const char* getGLerrorString(GLenum e)
 	return ret;
 }
 
+bool Texture::UploadTexture2D(uint32_t target, int internalFormat, int level,
+                              bool isCompressed, const Texture::MipLevel& mipLevel)
+{
+	bool anySuccess = false;
+	if(isCompressed) {
+		glCompressedTexImage2D(target, level, internalFormat,
+							   mipLevel.width, mipLevel.height,
+							   0, mipLevel.size, mipLevel.data);
+		GLenum e = glGetError();
+		if(e != GL_NO_ERROR) {
+			errprintf("Sending data from '%s' for mipmap level %d to the GPU with glCompressedTexImage2D() failed. "
+					  "Probably your GPU/driver doesn't support '%s' compression (glGetError() says '%s')\n",
+					  name.c_str(), level, formatName, getGLerrorString(e));
+		} else { // probably better than nothing if at least *some* mipmap level has been loaded
+			anySuccess = true;
+		}
+	} else {
+		glTexImage2D(target, level, internalFormat, mipLevel.width,
+					 mipLevel.height, 0, glFormat, glType,
+					 mipLevel.data);
+		GLenum e = glGetError();
+		if(e != GL_NO_ERROR) {
+			errprintf("Sending data from '%s' for mipmap level %d to the GPU with glTexImage2D() failed. "
+					  "glGetError() says '%s'\n", name.c_str(), level, getGLerrorString(e));
+		} else {
+			anySuccess = true;
+		}
+	}
+	return anySuccess;
+}
+
 bool Texture::CreateOpenGLtexture()
 {
 	if(glTextureHandle != 0) {
 		glDeleteTextures(1, &glTextureHandle);
 		glTextureHandle = 0;
 	}
+
+	if(elements.empty())
+		return false;
+
 	if(ktxTex != nullptr) {
 		GLenum target = 0;
 		GLenum glErr = 0;
@@ -80,11 +115,16 @@ bool Texture::CreateOpenGLtexture()
 			          "KTX error: %s OpenGL error: %s\n", name.c_str(), ktxErrorString(res), getGLerrorString(glErr));
 			return false;
 		}
+		glTarget = target;
+		GLint intFmt = 0;
+		GLenum baseFmt = 0;
+		ktxTexture_GetOpenGLFormat(ktxTex, &intFmt, &baseFmt, NULL, NULL);
+		printf("created texture  '%s' with internal format 0x%X base format 0x%X\n", name.c_str(), intFmt, baseFmt);
 		return true;
 	}
 
 	glGenTextures(1, &glTextureHandle);
-	glBindTexture(GL_TEXTURE_2D, glTextureHandle);
+	glBindTexture(glTarget, glTextureHandle);
 
 	GLenum internalFormat = dataFormat;
 	int numMips = GetNumMips();
@@ -92,33 +132,37 @@ bool Texture::CreateOpenGLtexture()
 	glGetError();
 	bool anySuccess = false;
 
-	for(int i=0; i<numMips; ++i) {
-		if(textureFlags & TF_COMPRESSED) {
-			glCompressedTexImage2D(GL_TEXTURE_2D, i, internalFormat,
-			                       mipLevels[i].width, mipLevels[i].height,
-			                       0, mipLevels[i].size, mipLevels[i].data);
-			GLenum e = glGetError();
-			if(e != GL_NO_ERROR) {
-				errprintf("Sending data from '%s' for mipmap level %d to the GPU with glCompressedTexImage2D() failed. "
-				          "Probably your GPU/driver doesn't support '%s' compression (glGetError() says '%s')\n",
-				          name.c_str(), i, formatName, getGLerrorString(e));
-			} else { // probably better than nothing if at least *some* mipmap level has been loaded
-				anySuccess = true;
+	const bool isArray = IsArray();
+	const bool isCubemap = IsCubemap();
+	const bool isCompressed = (textureFlags & TF_COMPRESSED) != 0;
+	if(!isArray) {
+		if(isCubemap) {
+			int elemIdx = 0;
+			for(int cf=0; cf < 6; ++cf) {
+				if(textureFlags & (TF_CUBEMAP_XPOS << cf)) {
+					GLenum target = GL_TEXTURE_CUBE_MAP_POSITIVE_X + cf;
+					std::vector<MipLevel>& mipLevels = elements[elemIdx];
+					for(int i=0; i<numMips; ++i) {
+						if(UploadTexture2D(target, internalFormat, i, isCompressed, mipLevels[i])) {
+							anySuccess = true;
+						}
+					}
+					++elemIdx;
+				}
 			}
-		} else {
-			GLenum format = glFormat;
-			GLenum type = glType;
-			glTexImage2D(GL_TEXTURE_2D, i, internalFormat, mipLevels[i].width,
-			              mipLevels[i].height, 0, format, type,
-			              mipLevels[i].data);
-			GLenum e = glGetError();
-			if(e != GL_NO_ERROR) {
-				errprintf("Sending data from '%s' for mipmap level %d to the GPU with glTexImage2D() failed. "
-				          "glGetError() says '%s'\n", name.c_str(), i, getGLerrorString(e));
-			} else {
-				anySuccess = true;
+		} else { // Texture2D
+			std::vector<MipLevel>& mipLevels = elements[0];
+			for(int i=0; i<numMips; ++i) {
+				if(UploadTexture2D(glTarget, internalFormat, i, isCompressed, mipLevels[i])) {
+					anySuccess = true;
+				}
 			}
 		}
+	} else { // it's an array
+		//glTexImage3D(target, level, internalformat, width, height, depth, border, format, type, pixels)
+		// TODO: do this for arrays, somehow.. https://www.khronos.org/opengl/wiki/Cubemap_Texture#Cubemap_array_textures
+		// maybe something with glTexImage3D(...., NULL) and then glTexSubImage() to set the data?
+		// might make sense to make the mips iteration the outer loop and the elements interation the inner loop?
 	}
 
 	return anySuccess;
@@ -187,13 +231,15 @@ bool Texture::Load(const char* filename)
 		dataFormat = GL_RGBA;
 		glFormat = GL_RGBA;
 		glType = GL_UNSIGNED_BYTE;
+		glTarget = GL_TEXTURE_2D;
 		if(comp == STBI_rgb_alpha || comp == STBI_grey_alpha)
 			textureFlags |= TF_HAS_ALPHA;
 		formatName = "STB"; // TODO
 		texData = pix;
 		texDataFreeFun = [](void* texData, intptr_t) -> void { stbi_image_free(texData); };
 
-		mipLevels.push_back( Texture::MipLevel(w, h, pix) );
+		elements.push_back( std::vector<MipLevel>() );
+		elements[0].push_back( Texture::MipLevel(w, h, pix) );
 
 		return true;
 	}
@@ -251,13 +297,36 @@ bool Texture::LoadKTX(MemMappedFile* mmf, const char* filename)
 		textureFlags |= TF_SRGB;
 
 	int numMips = ktxTex->numLevels;
-	int w = ktxTex->baseWidth;
-	int h = ktxTex->baseHeight;
-	for(int i=0; i<numMips; ++i) {
-		// just use dummy miplevels for easy access to the mip sizes
-		mipLevels.push_back(MipLevel(w, h));
-		w = std::max(w/2, 1);
-		h = std::max(h/2, 1);
+	int numElements = 1;
+	int numCubeFaces = 0;
+	if(ktxTex->isArray && ktxTex->numLayers > 1) {
+		numElements = ktxTex->numLayers;
+		textureFlags |= TF_IS_ARRAY;
+	}
+	if(ktxTex->isCubemap) {
+		numCubeFaces = ktxTex->numFaces;
+		numElements *= numCubeFaces;
+		if(numCubeFaces == 6) {
+			textureFlags |= TF_CUBEMAP_MASK;
+		} else {
+			for(int i=0; i<numCubeFaces; ++i) {
+				textureFlags |= uint32_t(TF_CUBEMAP_XPOS) << i;
+			}
+		}
+	}
+
+	elements.resize(numElements);
+	for( int e=0; e < numElements; ++e) {
+		std::vector<MipLevel>& mipLevels = elements[e];
+		mipLevels.reserve(numMips);
+		int w = ktxTex->baseWidth;
+		int h = ktxTex->baseHeight;
+		for(int i=0; i < numMips; ++i) {
+			// just use dummy miplevels for easy access to the mip sizes
+			mipLevels.push_back(MipLevel(w, h));
+			w = std::max(w/2, 1);
+			h = std::max(h/2, 1);
+		}
 	}
 
 	texData = mmf;
@@ -949,6 +1018,33 @@ bool Texture::LoadDDS(MemMappedFile* mmf, const char* filename)
 	}
 	ourFlags &= ~_TF_NOALPHA; // clear that flag, it's only for the tables
 
+	bool isCubemap = (header->dwCaps2 & DDSCAPS2_CUBEMAP_MASK) != 0;
+	int numCubeFaces = 0;
+	if(isCubemap) {
+		// DDSCAPS2_CUBEMAP_POSITIVEX = 0x400 (1<<10), TF_CUBEMAP_XPOS = 1u << 26
+		// (and the order of the bits for the other faces is identical)
+		// => leftshift the DDS mask by 16 to translate
+		ourFlags |= uint32_t(header->dwCaps2 & DDSCAPS2_CUBEMAP_MASK) << 16;
+		numCubeFaces = NumBitsSet(header->dwCaps2 & DDSCAPS2_CUBEMAP_MASK);
+	} else if(dx10header != nullptr && (dx10header->miscFlag & DDS_DX10MISC_TEXTURECUBE)) {
+		// if I understand correctly, DX10 DDS files with cubemaps always have all 6 faces
+		isCubemap = true;
+		numCubeFaces = 6;
+		ourFlags |= TF_CUBEMAP_MASK;
+	}
+
+	int numElements = 1;
+	if(dx10header != nullptr && (dx10header->arraySize > 1)) {
+		numElements = dx10header->arraySize;
+		ourFlags |= TF_IS_ARRAY;
+		glTarget = isCubemap ? GL_TEXTURE_CUBE_MAP_ARRAY : GL_TEXTURE_2D_ARRAY;
+	} else {
+		glTarget = isCubemap ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
+	}
+	if(numCubeFaces > 1) {
+		numElements *= numCubeFaces;
+	}
+
 	textureFlags = ourFlags;
 
 	name = filename;
@@ -956,30 +1052,39 @@ bool Texture::LoadDDS(MemMappedFile* mmf, const char* filename)
 	texData = mmf;
 	texDataFreeFun = [](void* texData, intptr_t) -> void { UnloadMemMappedFile( (MemMappedFile*)texData ); };
 
-	int mipW = w;
-	int mipH = h;
 	const unsigned char* dataCur = data + dataOffset;
-	for(int i=0; i<numMips; ++i) {
-		uint32_t mipSize;
-		if(!isASTC) {
-			mipSize = CalcSize(mipW, mipH, pitchTypeOrBitsPerPixel);
-		} else {
-			mipSize = CalcASTCmipSize(mipW, mipH, astcInfo.blockW, astcInfo.blockH);
+	elements.resize(numElements);
+	for(int e=0; e < numElements; ++e) {
+		std::vector<MipLevel>& mipLevels = elements[e];
+		mipLevels.reserve(numMips);
+
+		int mipW = w;
+		int mipH = h;
+		for(int i=0; i < numMips; ++i) {
+			uint32_t mipSize;
+			if(!isASTC) {
+				mipSize = CalcSize(mipW, mipH, pitchTypeOrBitsPerPixel);
+			} else {
+				mipSize = CalcASTCmipSize(mipW, mipH, astcInfo.blockW, astcInfo.blockH);
+			}
+			const unsigned char* dataNext = dataCur + mipSize;
+			if(dataNext > dataEnd) {
+				errprintf("MipMap level %d for '%s' is incomplete (file too small, %u bytes left, are at %u bytes from start) mipSize: %u w: %d h: %d!\n",
+						i, filename, unsigned(dataEnd - dataCur), unsigned(dataCur-data), mipSize, mipW, mipH);
+				return (i > 0); // if we loaded at least one mipmap we can display the file despite the error
+			}
+			mipLevels.push_back( MipLevel(mipW, mipH, dataCur, mipSize) );
+			if(mipW == 1 && mipH == 1 && i < numMips-1) {
+				errprintf( "Texture '%s' claimed to have %d MipMap levels, but we're already done after %d levels\n", filename, numMips, i+1 );
+				// don't break, I think - because for texture arrays it's important
+				// to read (skip forward) as much data as all specified mips need
+				// so the next mip level 0 starts at the right position in data
+				//break;
+			}
+			dataCur = dataNext;
+			mipW = std::max( mipW / 2, 1 );
+			mipH = std::max( mipH / 2, 1 );
 		}
-		const unsigned char* dataNext = dataCur + mipSize;
-		if(dataNext > dataEnd) {
-			errprintf("MipMap level %d for '%s' is incomplete (file too small, %u bytes left, are at %u bytes from start) mipSize: %u w: %d h: %d!\n",
-					i, filename, unsigned(dataEnd - dataCur), unsigned(dataCur-data), mipSize, mipW, mipH);
-			return (i > 0); // if we loaded at least one mipmap we can display the file despite the error
-		}
-		mipLevels.push_back( MipLevel(mipW, mipH, dataCur, mipSize) );
-		if(mipW == 1 && mipH == 1 && i < numMips-1) {
-			errprintf( "Texture '%s' claimed to have %d MipMap levels, but we're already done after %d levels\n", filename, numMips, i+1 );
-			break;
-		}
-		dataCur = dataNext;
-		mipW = std::max( mipW / 2, 1 );
-		mipH = std::max( mipH / 2, 1 );
 	}
 
 	return true;

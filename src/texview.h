@@ -7,12 +7,26 @@
 #include <utility>
 #include <vector>
 
+#ifdef _MSC_VER
+	#include <intrin.h>
+#endif
+
 // TODO: could have an error printing function that also shows message through ImGui (if that is running)
 #define errprintf(...) fprintf(stderr, __VA_ARGS__)
 
 struct ktxTexture;
 
 namespace texview {
+
+inline int NumBitsSet(uint32_t x) {
+#ifdef _MSC_VER
+	return __popcnt(x);
+#elif defined __GNUC__
+	return __builtin_popcount(x);
+#else
+	#error "unknown/unsupported compiler, adjust this function"
+#endif
+}
 
 struct MemMappedFile {
 	const void* data = nullptr;
@@ -33,15 +47,30 @@ extern MemMappedFile* LoadMemMappedFile(const char* filename);
 
 extern void UnloadMemMappedFile(MemMappedFile* mmf);
 
-enum TextureFlags {
+enum TextureFlags : uint32_t {
 	TF_NONE         = 0,
 	TF_SRGB         = 1,
 	TF_TYPELESS     = 2,
 	TF_HAS_ALPHA    = 4, // texture has an alpha channel that might be used (e.g. RGBA, not RGBX)
 	TF_PREMUL_ALPHA = 8,
-	TF_COMPRESSED   = 16,
+	TF_COMPRESSED   = 1 << 4,
 
-	_TF_NOALPHA     = 128, // formats that use GL_RGBA or similar, but are RGBX (or similar) - just for the format tables!
+	_TF_NOALPHA     = 1 << 7, // formats that use GL_RGBA or similar, but are RGBX (or similar) - just for the format tables!
+
+	TF_IS_ARRAY     = 1 << 8,
+
+	// at least DDS allows cubemaps with missing faces...
+	// so here's a separate flag for every cubemap face
+	TF_CUBEMAP_XPOS = 1u << 26,
+	TF_CUBEMAP_XNEG = 1u << 27,
+	TF_CUBEMAP_YPOS = 1u << 28,
+	TF_CUBEMAP_YNEG = 1u << 29,
+	TF_CUBEMAP_ZPOS = 1u << 30,
+	TF_CUBEMAP_ZNEG = 1u << 31,
+
+	TF_CUBEMAP_MASK = TF_CUBEMAP_XPOS | TF_CUBEMAP_XNEG
+	                  | TF_CUBEMAP_YPOS | TF_CUBEMAP_YNEG
+	                  | TF_CUBEMAP_ZPOS | TF_CUBEMAP_ZNEG,
 };
 
 struct Texture {
@@ -76,7 +105,10 @@ struct Texture {
 	std::string name;
 	const char* formatName = nullptr;
 private:
-	std::vector<MipLevel> mipLevels;
+	// elements of texture array or cubemap. if it's just one texture, it's just one element.
+	// if it's a cubemap, it's the (up to) 6 images of the cubemap (according to textureFlags)
+	// if it's an array of N cubemaps, there are (up to) 6 * N elements.
+	std::vector<std::vector<MipLevel> > elements;
 public:
 	FileType fileType = FT_NONE;
 
@@ -100,6 +132,8 @@ public:
 	// the glTexImage2D() manpage doesn't mention it, but allegedly GL_HALF_FLOAT is also accepted:
 	// https://community.khronos.org/t/loading-gl-rgba16f-to-glteximage2d/70296/4
 
+	uint32_t glTarget = 0; // GL_TEXTURE_2D, GL_CUBE_MAP, array variations of that
+
 	unsigned int glTextureHandle = 0;
 
 	// texData is freed with texDataFreeFun
@@ -114,9 +148,10 @@ public:
 	Texture(const Texture& other) = delete; // if needed we'll need reference counting or similar for texData
 
 	Texture(Texture&& other) : name(std::move(other.name)), formatName(other.formatName),
-		mipLevels(std::move(other.mipLevels)), fileType(other.fileType),
+		elements(std::move(other.elements)), fileType(other.fileType),
 		textureFlags(other.textureFlags), dataFormat(other.dataFormat),
-		glFormat(other.glFormat), glType(other.glType), glTextureHandle(other.glTextureHandle),
+		glFormat(other.glFormat), glType(other.glType), glTarget(other.glTarget),
+		glTextureHandle(other.glTextureHandle),
 		texData(other.texData), texDataFreeCookie(other.texDataFreeCookie),
 		texDataFreeFun(other.texDataFreeFun), ktxTex(other.ktxTex)
 	{
@@ -133,7 +168,7 @@ public:
 		name = std::move(other.name);
 		formatName = other.formatName;
 		other.formatName = nullptr;
-		mipLevels = std::move(other.mipLevels);
+		elements = std::move(other.elements);
 		fileType = other.fileType;
 		dataFormat = other.dataFormat;
 		other.fileType = FT_NONE;
@@ -142,7 +177,8 @@ public:
 		other.textureFlags = 0;
 		glFormat = other.glFormat;
 		glType = other.glType;
-		other.glFormat = other.glType = 0;
+		glTarget = other.glTarget;
+		other.glFormat = other.glType = other.glTarget = 0;
 		glTextureHandle = other.glTextureHandle;
 		other.glTextureHandle = 0;
 		texData = other.texData;
@@ -164,14 +200,37 @@ public:
 	void Clear();
 
 	int GetNumMips() const {
-		return int(mipLevels.size());
+		return elements.empty() ? 0 : int(elements[0].size());
+	}
+
+	// number of texture array elements (1 if it's just a regular texture)
+	// if this is a cubemap texture (array), one cubemap counts as one
+	// even if internally it's saved as GetNumElements() * GetNumCubemapFaces() elements
+	int GetNumElements() const {
+		int ret = int(elements.size());
+		if(IsCubemap()) {
+			ret /= GetNumCubemapFaces();
+		}
+		return ret;
+	}
+
+	int GetNumCubemapFaces() const {
+		return NumBitsSet(textureFlags & TF_CUBEMAP_MASK);
+	}
+
+	bool IsCubemap() const {
+		return (textureFlags & TF_CUBEMAP_MASK) != 0;
+	}
+
+	bool IsArray() const {
+		return (textureFlags & TF_IS_ARRAY) != 0;
 	}
 
 	void GetSize(float* w, float* h) const {
 		float w_ = 0, h_ = 0;
-		if(mipLevels.size() > 0) {
-			w_ = mipLevels[0].width;
-			h_ = mipLevels[0].height;
+		if(!elements.empty() && elements[0].size() > 0) {
+			w_ = elements[0][0].width;
+			h_ = elements[0][0].height;
 		}
 		if(w)
 			*w = w_;
@@ -182,9 +241,10 @@ public:
 	void GetMipSize(int mipLevel, float* w, float* h) const {
 		float w_ = 0, h_ = 0;
 		int numMips = GetNumMips();
-		if(numMips > 0 && mipLevel >= 0 && mipLevel < numMips) {
-			w_ = mipLevels[mipLevel].width;
-			h_ = mipLevels[mipLevel].height;
+		if(!elements.empty() && numMips > 0 && mipLevel >= 0 && mipLevel < numMips) {
+			// all elements in a texture array have the same sizes
+			w_ = elements[0][mipLevel].width;
+			h_ = elements[0][mipLevel].height;
 		}
 		if(w)
 			*w = w_;
@@ -195,6 +255,8 @@ public:
 private:
 	bool LoadDDS(MemMappedFile* mmf, const char* filename);
 	bool LoadKTX(MemMappedFile* mmf, const char* filename);
+
+	bool UploadTexture2D(uint32_t target, int internalFormat, int level, bool isCompressed, const Texture::MipLevel& mipLevel);
 };
 
 } //namespace texview
