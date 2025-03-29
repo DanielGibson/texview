@@ -34,6 +34,7 @@ static ImVec4 clear_color(0.45f, 0.55f, 0.60f, 1.00f);
 static texview::Texture curTex;
 
 static bool showImGuiDemoWindow = false;
+static bool showAboutWindow = false;
 
 static float imGuiMenuWidth = 0.0f;
 static bool imguiMenuCollapsed = false;
@@ -538,16 +539,49 @@ static void OpenFilePicker() {
 #endif
 }
 
-static void ImGuiFrame(GLFWwindow* window)
+static void DrawAboutWindow(GLFWwindow* window)
 {
-	// Start the Dear ImGui frame
-	ImGui_ImplOpenGL3_NewFrame();
-	ImGui_ImplGlfw_NewFrame();
-	ImGui::NewFrame();
+	ImGuiIO& io = ImGui::GetIO();
 
-	if(showImGuiDemoWindow)
-		ImGui::ShowDemoWindow(&showImGuiDemoWindow);
+	ImGui::SetNextWindowPos( ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f),
+	                         ImGuiCond_Appearing, ImVec2(0.5f, 0.5f) );
+	ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize
+	                        | ImGuiWindowFlags_NoCollapse;
+	if(ImGui::Begin("About", &showAboutWindow, flags)) {
+		ImGui::TextDisabled("A texture viewer.");
+		ImGui::Spacing();
+		ImGui::Text("Zoom with the mouse wheel,\nmove texture by dragging mouse.");
+		ImGui::Text("Press R to reset view.");
+		ImGui::Spacing();
 
+		ImGui::BeginDisabled();
+		ImGui::Text("(C) 2025 Daniel Gibson");
+		ImGui::Spacing();
+		ImGui::Text("Released under MIT license.");
+		ImGui::Text("Uses several libraries including GLFW,\n"
+		            "Dear ImGui, Native File Dialog Extended,\nstb_image.h and libktx.");
+		ImGui::Text("See Licenses.txt for details.");
+		ImGui::EndDisabled();
+
+		ImGui::Spacing();
+		ImGui::TextLinkOpenURL("https://github.com/DanielGibson/texview");
+		ImGui::TextLinkOpenURL("https://blog.gibson.sh");
+		ImGui::Spacing();
+		ImGui::Spacing();
+
+		float dialogButtonWidth = ImGui::CalcTextSize( "Ok or Cancel ???" ).x; // this width looks ok
+		float buttonOffset = (ImGui::GetWindowWidth() - dialogButtonWidth) * 0.5f;
+		ImGui::SetCursorPosX( buttonOffset );
+		if( ImGui::Button("Close", ImVec2(dialogButtonWidth, 0))
+		   || ImGui::IsKeyPressed(ImGuiKey_Escape, false) ) {
+			showAboutWindow = false;
+		}
+	}
+	ImGui::End();
+}
+
+static void DrawSidebar(GLFWwindow* window)
+{
 	ImGuiIO& io = ImGui::GetIO();
 
 	ImGui::SetNextWindowPos( ImVec2(0, 0), ImGuiCond_Appearing );
@@ -639,7 +673,7 @@ static void ImGuiFrame(GLFWwindow* window)
 					float w, h;
 					curTex.GetMipSize(mipLevel, &w, &h);
 					snprintf(miplevelStrBuf, sizeof(miplevelStrBuf), "%d (%dx%d)",
-							 mipLevel, (int)w, (int)h);
+					         mipLevel, (int)w, (int)h);
 				}
 				if(ImGui::SliderInt("Mip Level", &mipLevel, -1, maxLevel, miplevelString)) {
 					mipmapLevel = mipLevel;
@@ -676,15 +710,36 @@ static void ImGuiFrame(GLFWwindow* window)
 		ImGui::Spacing(); ImGui::Spacing();
 
 		ImGui::ColorEdit3("BG Color", &clear_color.x);
-
+		ImGui::Spacing(); ImGui::Spacing();
 		ImGui::Separator();
-		ImGui::Spacing();
+		ImGui::Spacing(); ImGui::Spacing();
+		float aboutButtonWidth = ImGui::CalcTextSize( "About blah" ).x; // this width looks ok
+		ImGui::SetCursorPosX( (ImGui::GetWindowWidth() - aboutButtonWidth) * 0.5f );
+		if(ImGui::Button("About")) {
+			showAboutWindow = true;
+		}
+		ImGui::Dummy(ImVec2(8, 32));
 		ImGui::Checkbox("Show ImGui Demo Window", &showImGuiDemoWindow);
 		imGuiMenuWidth = ImGui::GetWindowWidth();
 	}
 	imguiMenuCollapsed = ImGui::IsWindowCollapsed();
 	ImGui::End();
+}
 
+static void ImGuiFrame(GLFWwindow* window)
+{
+	// Start the Dear ImGui frame
+	ImGui_ImplOpenGL3_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
+
+	if(showImGuiDemoWindow)
+		ImGui::ShowDemoWindow(&showImGuiDemoWindow);
+
+	if(showAboutWindow)
+		DrawAboutWindow(window);
+
+	DrawSidebar(window);
 
 	// NOTE: ImGui::GetMouseDragDelta() is not very useful here, because
 	//       I only want drags that start outside of ImGui windows
