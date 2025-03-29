@@ -11,8 +11,10 @@ Contributions are welcome, but maybe ping me first so we don't accidentally impl
 
 Project page: https://github.com/DanielGibson/texview
 
-You can download Windows and Linux test binaries from automated builds at https://github.com/DanielGibson/texview/actions  
-Downloading them REQUIRES YOU TO BE LOGGED INTO GITHUB!  
+Download the latest release at https://github.com/DanielGibson/texview/releases/latest
+
+or download Windows and Linux test binaries from automated builds at https://github.com/DanielGibson/texview/actions  
+Downloading automated test builds REQUIRES YOU TO BE LOGGED INTO GITHUB!  
 Click on an appropriate "workflow run" and then, under "Artifacts", you can download the build in a ZIP,
 for example "texview-win64-120eeaa".
 
@@ -57,7 +59,7 @@ for example "texview-win64-120eeaa".
 
 **Maybe at some point:**
 
-* Support rendering texture on a 3D object (cube, sphere, ...) with additional textures (normalmap, ...)
+* Support rendering the texture on a 3D object (cube, sphere, ...) maybe with additional textures (normalmap, ...)
   and moveable light and camera
     - Allow customizing shader code for that (feasible with OpenGL as it takes GLSL directly)
 * Diffing images (e.g. to show differences between source image and compressed texture)

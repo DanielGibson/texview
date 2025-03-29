@@ -552,6 +552,8 @@ static void DrawAboutWindow(GLFWwindow* window)
 		ImGui::Spacing();
 		ImGui::Text("Zoom with the mouse wheel,\nmove texture by dragging mouse.");
 		ImGui::Text("Press R to reset view.");
+		ImGui::Text("You can Ctrl-Click into sliders and\n"
+		            "similar to enter the value as text.");
 		ImGui::Spacing();
 
 		ImGui::BeginDisabled();
