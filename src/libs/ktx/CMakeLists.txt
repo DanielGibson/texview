@@ -227,7 +227,8 @@ macro(common_libktx_settings target enable_write library_type)
     target_include_directories(
         ${target}
         SYSTEM
-    PRIVATE
+    #PRIVATE
+    PUBLIC # DG: making other_includes public so vk2gl.h can find GL/glcorearb.h on Winddows
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/other_include>
         $<INSTALL_INTERFACE:other_include>
     )

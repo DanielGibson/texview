@@ -218,6 +218,8 @@ struct vec3 {
 		struct { float x, y, z; };
 		float vals[3];
 	};
+	vec3() = default;
+	vec3(float x_, float y_, float z_ = 0.0f) : x(x_), y(y_), z(z_) {}
 };
 enum CubeFaceIndex {
 	FI_XPOS = 0,
@@ -259,22 +261,22 @@ static void DrawCubeQuad(texview::Texture& texture, int mipLevel, int faceIndex,
 			vec3 tmp;
 			switch(faceIndex) {
 				case FI_XPOS:
-					tmp = (vec3){ 1.0f, -mc.y, -mc.x };
+					tmp = vec3( 1.0f, -mc.y, -mc.x );
 					break;
 				case FI_XNEG:
-					tmp = (vec3){ -1.0f, -mc.y, mc.x };
+					tmp = vec3( -1.0f, -mc.y, mc.x );
 					break;
 				case FI_YPOS:
-					tmp = (vec3){ mc.x, 1.0f, mc.y };
+					tmp = vec3( mc.x, 1.0f, mc.y );
 					break;
 				case FI_YNEG:
-					tmp = (vec3){ mc.x, -1.0f, -mc.y };
+					tmp = vec3( mc.x, -1.0f, -mc.y );
 					break;
 				case FI_ZPOS:
-					tmp = (vec3){ mc.x, -mc.y, 1.0f };
+					tmp = vec3( mc.x, -mc.y, 1.0f );
 					break;
 				case FI_ZNEG:
-					tmp = (vec3){ -mc.x, -mc.y, -1.0f };
+					tmp = vec3( -mc.x, -mc.y, -1.0f );
 					break;
 			}
 			mc = tmp;
