@@ -370,6 +370,7 @@ static void DrawTexture()
 		DrawCubeQuad(tex, -1, FI_YNEG, ImVec2(posX, posY), size);
 
 		glDisable( GL_FRAMEBUFFER_SRGB ); // make sure it's disabled or ImGui will look wrong
+		glDisable(tex.glTarget);
 		return;
 	}
 
@@ -467,6 +468,7 @@ static void DrawTexture()
 		}
 	}
 
+	glDisable(tex.glTarget);
 	glDisable( GL_FRAMEBUFFER_SRGB ); // make sure it's disabled or ImGui will look wrong
 }
 
