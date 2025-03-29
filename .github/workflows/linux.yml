@@ -33,7 +33,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake -G Ninja -DNFD_PORTAL=ON ../src/
+        cmake -G Ninja -DCMAKE_BUILD_TYPE=MinSizeRel -DNFD_PORTAL=ON ../src/
         ninja
     - name: Create testbuild package
       run: |
