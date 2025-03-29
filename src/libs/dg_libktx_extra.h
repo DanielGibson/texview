@@ -1,13 +1,19 @@
 /*
  * dg_libktx_extra.h
  *
- * Some additional functions to get additional infos from KTX/KTX2 textures
+ * Some additional functions to get more infos from KTX/KTX2 textures
  * and some related functions to get additional infos about OpenGL types
  * (I use those for textures *not* loaded with libktx).
  *
  * This implementation relies on internal code from libktx!
  *
- * No warranty implied, otherwise you can do with this code whatever you want.
+ * (C) 2025 Daniel Gibson
+ *
+ * License:
+ *   This software is dual-licensed to the public domain and under the following
+ *   license: you are granted a perpetual, irrevocable license to copy, modify,
+ *   publish, and distribute this file as you see fit.
+ *   No warranty implied; use at your own risk.
  *
  */
 

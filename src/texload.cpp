@@ -1,3 +1,9 @@
+/*
+ * Copyright (C) 2025 Daniel Gibson
+ *
+ * Released under MIT License, see Licenses.txt
+ */
+
 #define STBI_NO_STDIO
 #include "libs/stb_image.h"
 #include <glad/gl.h>

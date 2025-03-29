@@ -1,4 +1,8 @@
-
+/*
+ * Copyright (C) 2025 Daniel Gibson
+ *
+ * Released under MIT License, see Licenses.txt
+ */
 #include "texview.h"
 
 #include <fcntl.h> // open()

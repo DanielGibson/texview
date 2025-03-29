@@ -9,6 +9,13 @@ and you can press your `R` key to reset the view.
 
 Contributions are welcome, but maybe ping me first so we don't accidentally implement the same thing twice :)
 
+Project page: https://github.com/DanielGibson/texview
+
+You can download Windows and Linux test binaries from automated builds at https://github.com/DanielGibson/texview/actions  
+Downloading them REQUIRES YOU TO BE LOGGED INTO GITHUB!  
+Click on an appropriate "workflow run" and then, under "Artifacts", you can download the build in a ZIP,
+for example "texview-win64-120eeaa".
+
 **Goals:**
 
 - [x] Support at least Windows and Linux (and probably similar Unix-likes)
@@ -82,3 +89,8 @@ or generate a VS solution and build that, or use ninja, or whatever.
       See also https://github.com/btzy/nativefiledialog-extended/#using-xdg-desktop-portal-on-linux
 
 On **Windows** it just needs a recent Visual Studio version (I tested VS2022, but probably >= VS2015 works).
+
+## License:
+
+This software is licensed under **MIT license**, but the source includes libraries that use other
+licenses. See Licenses.txt for details.

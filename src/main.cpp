@@ -1,3 +1,8 @@
+/*
+ * Copyright (C) 2025 Daniel Gibson
+ *
+ * Released under MIT License, see Licenses.txt
+ */
 
 #include <imgui.h>
 #include <backends/imgui_impl_glfw.h>

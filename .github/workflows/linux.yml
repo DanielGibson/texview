@@ -26,7 +26,6 @@ jobs:
     - name: Install build dependencies
       run: |
         sudo apt update
-        # TODO: libgl1-mesa-dev ?
         sudo apt install cmake ninja-build libwayland-dev libxkbcommon-dev xorg-dev libdbus-1-dev
     - name: Check out repository code
       uses: actions/checkout@v4
@@ -54,7 +53,7 @@ jobs:
         echo "  chmod 755 texview" >> publish/$PKGDIR/README.txt
         echo -e "(this is because of limitations in Githubs Workflow Actions)\n" >> publish/$PKGDIR/README.txt
         cat README.md >> publish/$PKGDIR/README.txt
-        # TODO: Licenses.txt, once it exists
+        cp Licenses.txt publish/$PKGDIR/
     - name: Upload testbuild package
       uses: actions/upload-artifact@v4
       with:

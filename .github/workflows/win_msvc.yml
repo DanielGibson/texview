@@ -49,7 +49,7 @@ jobs:
         echo "texview for 32bit (x86) Windows, built $(date)" > publish/$PKGDIR/README.txt
         echo -e "from ${{ github.ref_name }} commit ${{ github.sha }}\n" >> publish/$PKGDIR/README.txt
         cat README.md >> publish/$PKGDIR/README.txt
-        # TODO: Licenses.txt once it exists
+        cp Licenses.txt publish/$PKGDIR/
         cd -
     - name: Upload testbuild package
       uses: actions/upload-artifact@v4
@@ -97,7 +97,7 @@ jobs:
         echo "texview for 64bit (amd64 aka x86_64 aka x64) Windows, built $(date)" > publish/$PKGDIR/README.txt
         echo -e "from ${{ github.ref_name }} commit ${{ github.sha }}\n" >> publish/$PKGDIR/README.txt
         cat README.md >> publish/$PKGDIR/README.txt
-        # TODO: Licenses.txt once it exists
+        cp Licenses.txt publish/$PKGDIR/
         cd -
     - name: Upload testbuild package
       uses: actions/upload-artifact@v4

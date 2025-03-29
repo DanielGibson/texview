@@ -1,3 +1,12 @@
+/*
+ * Copyright (C) 2025 Daniel Gibson
+ *
+ * Released under MIT License, see Licenses.txt
+ *
+ * This also includes some code from SDL (https://libsdl.org) at
+ * the end of the file (the WinMain() implementation) that is under
+ * zlib license, see below and/or Licenses.txt
+ */
 
 #include "windows.h"
 

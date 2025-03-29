@@ -1,3 +1,8 @@
+/*
+ * Copyright (C) 2025 Daniel Gibson
+ *
+ * Released under MIT License, see Licenses.txt
+ */
 
 #ifndef _TEXVIEW_H
 #define _TEXVIEW_H
