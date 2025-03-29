@@ -774,6 +774,57 @@ void myGLFWwindowcontentscalefun(GLFWwindow* window, float xscale, float yscale)
 	ImGui::GetIO().FontGlobalScale = std::max(xscale, yscale);
 }
 
+/*
+ * Callback function for debug output.
+ */
+static void APIENTRY
+GLDebugCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length,
+                const GLchar *message, const void *userParam)
+{
+	const char* sourceStr = "Source: Unknown";
+	const char* typeStr = "Type: Unknown";
+	const char* severityStr = "Severity: Unknown";
+
+	switch (severity)
+	{
+#define SVRCASE(X, STR)  case GL_DEBUG_SEVERITY_ ## X ## _ARB : severityStr = STR; break;
+		// GL_DEBUG_SEVERITY_NOTIFICATION_ARB is not in the glad header
+		// (not specified in GL_ARB_debug_output I think?) but drivers send such
+		// messages anyway. I don't want them so just return when getting that value
+		case 0x826B:  return;
+		SVRCASE(HIGH, "Severity: High")
+		SVRCASE(MEDIUM, "Severity: Medium")
+		SVRCASE(LOW, "Severity: Low")
+#undef SVRCASE
+	}
+
+	switch (source)
+	{
+#define SRCCASE(X)  case GL_DEBUG_SOURCE_ ## X ## _ARB: sourceStr = "Source: " #X; break;
+		SRCCASE(API);
+		SRCCASE(WINDOW_SYSTEM);
+		SRCCASE(SHADER_COMPILER);
+		SRCCASE(THIRD_PARTY);
+		SRCCASE(APPLICATION);
+		SRCCASE(OTHER);
+#undef SRCCASE
+	}
+
+	switch(type)
+	{
+#define TYPECASE(X)  case GL_DEBUG_TYPE_ ## X ## _ARB: typeStr = "Type: " #X; break;
+		TYPECASE(ERROR);
+		TYPECASE(DEPRECATED_BEHAVIOR);
+		TYPECASE(UNDEFINED_BEHAVIOR);
+		TYPECASE(PORTABILITY);
+		TYPECASE(PERFORMANCE);
+		TYPECASE(OTHER);
+#undef TYPECASE
+	}
+
+	errprintf("GLDBG %s %s %s: %s\n", sourceStr, typeStr, severityStr, message);
+}
+
 #ifdef _WIN32
 int my_main(int argc, char** argv) // called from WinMain() in sys_win.cpp
 #else
@@ -816,8 +867,19 @@ int main(int argc, char** argv)
 
 	glfwMakeContextCurrent(glfwWindow);
 	gladLoadGL(glfwGetProcAddress);
-	glfwSwapInterval(1); // Enable vsync
 
+	const char* glDebugEnv = getenv("TEXVIEW_GLDEBUG");
+	if(glDebugEnv != nullptr && atoi(glDebugEnv) != 0) {
+		if(!GLAD_GL_ARB_debug_output) {
+			errprintf( "You set the TEXTVIEW_GLDEBUG environment variable, but GL_ARB_debug_output is not available!\n" );
+		} else {
+			errprintf( "You set the TEXTVIEW_GLDEBUG environment variable, enabling OpenGL debug logging\n" );
+			glDebugMessageCallbackARB(GLDebugCallback, NULL);
+			glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB);
+		}
+	}
+
+	glfwSwapInterval(1); // Enable vsync
 	ktxLoadOpenGL(glfwGetProcAddress);
 
 	glfwSetScrollCallback(glfwWindow, myGLFWscrollfun);
