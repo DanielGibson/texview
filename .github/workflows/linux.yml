@@ -1,0 +1,63 @@
+name: Testbuild for Linux
+run-name: testbuild_linux
+on:
+  push:
+    branches:
+      - 'main'
+      - 'dev'
+  pull_request:
+    types:
+      - edited
+      - opened
+      - synchronize
+concurrency:
+  # Cancel concurrent workflows for the same PR or commit hash.
+  group: ${{github.workflow}}-${{github.event_name == 'pull_request' && github.head_ref || github.sha}}
+  cancel-in-progress: true
+jobs:
+  build_ubuntu_x86_64:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - env: ubuntu
+    steps:
+    - name: Install build dependencies
+      run: |
+        sudo apt update
+        # TODO: libgl1-mesa-dev ?
+        sudo apt install cmake ninja-build libwayland-dev libxkbcommon-dev xorg-dev libdbus-1-dev
+    - name: Check out repository code
+      uses: actions/checkout@v4
+    - name: Build
+      run: |
+        mkdir build
+        cd build
+        cmake -G Ninja -DNFD_PORTAL=ON ../src/
+        ninja
+    - name: Create testbuild package
+      run: |
+        # Create release directory tree
+        export PKGDIR="texview-linux-$(git rev-parse --short HEAD)"
+        echo "pkgname=$PKGDIR" >> $GITHUB_ENV
+        mkdir -p publish/$PKGDIR
+        # Copy release assets
+        cd build
+        cp texview ../publish/$PKGDIR/
+        cd ..
+        # Copy misc assets
+        echo "texview for 64bit (amd64 aka x86_64 aka x64) Linux, built $(date)" > publish/$PKGDIR/README.txt
+        echo -e "from ${{ github.ref_name }} commit ${{ github.sha }}\n" >> publish/$PKGDIR/README.txt
+        echo "!!! Note that you must set texview executable !!!" >> publish/$PKGDIR/README.txt
+        echo "! In a Terminal, in this directory, run:" >> publish/$PKGDIR/README.txt
+        echo "  chmod 755 texview" >> publish/$PKGDIR/README.txt
+        echo -e "(this is because of limitations in Githubs Workflow Actions)\n" >> publish/$PKGDIR/README.txt
+        cat README.md >> publish/$PKGDIR/README.txt
+        # TODO: Licenses.txt, once it exists
+    - name: Upload testbuild package
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.pkgname }}
+        path: publish/
+        if-no-files-found: error
