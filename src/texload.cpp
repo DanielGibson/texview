@@ -222,10 +222,23 @@ bool Texture::Load(const char* filename)
 		UnloadMemMappedFile(mmf);
 		return false;
 	}
+	const unsigned char* data = (const unsigned char*)mmf->data;
+	int len = mmf->length;
 	int w, h, comp;
-	unsigned char* pix;
-	pix = stbi_load_from_memory((const unsigned char*)mmf->data,
-								(int)mmf->length, &w, &h, &comp, STBI_rgb_alpha);
+	void* pix = nullptr;
+	if(stbi_is_hdr_from_memory(data, len)) {
+		pix = stbi_loadf_from_memory(data, len, &w, &h, &comp, STBI_rgb_alpha);
+		formatName = "STB HDR (F32)";
+		glType = GL_FLOAT;
+	} else if(stbi_is_16_bit_from_memory(data, len)) {
+		pix = stbi_load_16_from_memory(data, len, &w, &h, &comp, STBI_rgb_alpha);
+		formatName = "STB UNORM16";
+		glType = GL_UNSIGNED_SHORT;
+	} else {
+		pix = stbi_load_from_memory(data, len, &w, &h, &comp, STBI_rgb_alpha);
+		formatName = "STB UNORM8";
+		glType = GL_UNSIGNED_BYTE;
+	}
 
 	if(pix != nullptr) {
 		// mmf is not needed anymore, decoded image data is in pix
@@ -236,11 +249,9 @@ bool Texture::Load(const char* filename)
 		fileType = FT_STB;
 		dataFormat = GL_RGBA;
 		glFormat = GL_RGBA;
-		glType = GL_UNSIGNED_BYTE;
 		glTarget = GL_TEXTURE_2D;
 		if(comp == STBI_rgb_alpha || comp == STBI_grey_alpha)
 			textureFlags |= TF_HAS_ALPHA;
-		formatName = "STB"; // TODO
 		texData = pix;
 		texDataFreeFun = [](void* texData, intptr_t) -> void { stbi_image_free(texData); };
 
