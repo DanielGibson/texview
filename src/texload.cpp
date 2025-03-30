@@ -226,16 +226,24 @@ bool Texture::Load(const char* filename)
 	int len = mmf->length;
 	int w, h, comp;
 	void* pix = nullptr;
+	if(!stbi_info_from_memory(data, len, &w, &h, &comp)) {
+		errprintf("Couldn't get info about '%s', maybe the filetype is unsupported?\n", filename);
+		UnloadMemMappedFile(mmf);
+		return false;
+	}
+	// we want either 8 or 16, 32, 64 or 96 bit pixels, not 24 or 48 (I think?)
+	int numChans = comp < 3 ? comp : 4;
 	if(stbi_is_hdr_from_memory(data, len)) {
-		pix = stbi_loadf_from_memory(data, len, &w, &h, &comp, STBI_rgb_alpha);
+		numChans = comp; // for float32 channels RGB (96bit) is also fine, I think?
+		pix = stbi_loadf_from_memory(data, len, &w, &h, &comp, numChans);
 		formatName = "STB HDR (F32)";
 		glType = GL_FLOAT;
 	} else if(stbi_is_16_bit_from_memory(data, len)) {
-		pix = stbi_load_16_from_memory(data, len, &w, &h, &comp, STBI_rgb_alpha);
+		pix = stbi_load_16_from_memory(data, len, &w, &h, &comp, numChans);
 		formatName = "STB UNORM16";
 		glType = GL_UNSIGNED_SHORT;
 	} else {
-		pix = stbi_load_from_memory(data, len, &w, &h, &comp, STBI_rgb_alpha);
+		pix = stbi_load_from_memory(data, len, &w, &h, &comp, numChans);
 		formatName = "STB UNORM8";
 		glType = GL_UNSIGNED_BYTE;
 	}
@@ -247,9 +255,27 @@ bool Texture::Load(const char* filename)
 
 		name = filename;
 		fileType = FT_STB;
-		dataFormat = GL_RGBA;
-		glFormat = GL_RGBA;
 		glTarget = GL_TEXTURE_2D;
+
+		switch(comp) {
+			case 4:
+				dataFormat = GL_RGBA;
+				glFormat = GL_RGBA;
+				break;
+			case 3:
+				dataFormat = GL_RGB;
+				glFormat = GL_RGB;
+				break;
+			case 2:
+				dataFormat = GL_LUMINANCE_ALPHA;
+				glFormat = GL_LUMINANCE_ALPHA;
+				break;
+			case 1:
+				dataFormat = GL_LUMINANCE;
+				glFormat = GL_LUMINANCE;
+				break;
+		}
+
 		if(comp == STBI_rgb_alpha || comp == STBI_grey_alpha)
 			textureFlags |= TF_HAS_ALPHA;
 		texData = pix;
@@ -259,6 +285,9 @@ bool Texture::Load(const char* filename)
 		elements[0].push_back( Texture::MipLevel(w, h, pix) );
 
 		return true;
+	} else {
+		formatName = nullptr;
+		glType = 0;
 	}
 
 	// TODO: anything else to try?
