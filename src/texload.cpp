@@ -29,7 +29,7 @@ namespace texview {
 
 void Texture::Clear()
 {
-	formatName = nullptr;
+	formatName.clear();
 	elements.clear();
 	if(glTextureHandle > 0) {
 		glDeleteTextures(1, &glTextureHandle);
@@ -82,7 +82,7 @@ bool Texture::UploadTexture2D(uint32_t target, int internalFormat, int level,
 		if(e != GL_NO_ERROR) {
 			errprintf("Sending data from '%s' for mipmap level %d to the GPU with glCompressedTexImage2D() failed. "
 					  "Probably your GPU/driver doesn't support '%s' compression (glGetError() says '%s')\n",
-					  name.c_str(), level, formatName, getGLerrorString(e));
+					  name.c_str(), level, formatName.c_str(), getGLerrorString(e));
 		} else { // probably better than nothing if at least *some* mipmap level has been loaded
 			anySuccess = true;
 		}
@@ -236,15 +236,17 @@ bool Texture::Load(const char* filename)
 	if(stbi_is_hdr_from_memory(data, len)) {
 		numChans = comp; // for float32 channels RGB (96bit) is also fine, I think?
 		pix = stbi_loadf_from_memory(data, len, &w, &h, &comp, numChans);
-		formatName = "STB HDR (F32)";
+		// TODO: should HDR be rendered with sRGB framebuffer enabled?
+		// TODO: TF_HDR flag?
+		formatName = "STB HDR (F32) ";
 		glType = GL_FLOAT;
 	} else if(stbi_is_16_bit_from_memory(data, len)) {
 		pix = stbi_load_16_from_memory(data, len, &w, &h, &comp, numChans);
-		formatName = "STB UNORM16";
+		formatName = "STB UNORM16 ";
 		glType = GL_UNSIGNED_SHORT;
 	} else {
 		pix = stbi_load_from_memory(data, len, &w, &h, &comp, numChans);
-		formatName = "STB UNORM8";
+		formatName = "STB UNORM8 ";
 		glType = GL_UNSIGNED_BYTE;
 	}
 
@@ -257,20 +259,24 @@ bool Texture::Load(const char* filename)
 		fileType = FT_STB;
 		glTarget = GL_TEXTURE_2D;
 
-		switch(comp) {
+		switch(numChans) {
 			case 4:
+				formatName += (comp == 3) ? "RGB(X)" : "RGBA";
 				dataFormat = GL_RGBA;
 				glFormat = GL_RGBA;
 				break;
 			case 3:
+				formatName += "RGB";
 				dataFormat = GL_RGB;
 				glFormat = GL_RGB;
 				break;
 			case 2:
+				formatName += "Luminance+Alpha";
 				dataFormat = GL_LUMINANCE_ALPHA;
 				glFormat = GL_LUMINANCE_ALPHA;
 				break;
 			case 1:
+				formatName += "Luminance";
 				dataFormat = GL_LUMINANCE;
 				glFormat = GL_LUMINANCE;
 				break;
@@ -329,7 +335,8 @@ bool Texture::LoadKTX(MemMappedFile* mmf, const char* filename)
 	name = filename;
 	// TODO: would be nicer maybe to prepend "KTX" and maybe to use GL-like names like the DDS loader does
 	//   for that https://github.com/KhronosGroup/KTX-Specification/blob/main/formats.json could help
-	formatName = ktxTexture_GetFormatName(ktxTex);
+	formatName = (ktxTex->classId == ktxTexture2_c) ? "KTX2 " : "KTX ";
+	formatName += ktxTexture_GetFormatName(ktxTex);
 
 	this->ktxTex = ktxTex;
 	fileType = FT_KTX;
@@ -1050,6 +1057,7 @@ bool Texture::LoadDDS(MemMappedFile* mmf, const char* filename)
 		           filename, fourcc, fccstr, fourcc, dxgiFmt );
 		return false;
 	}
+	formatName.insert(0, "DDS ");
 
 	if(dx10misc2 != 0) {
 		if(dx10misc2 == DDS_DX10MISC2_ALPHA_OPAQUE)

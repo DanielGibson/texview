@@ -108,7 +108,7 @@ struct Texture {
 	typedef void(*TexDataFreeFun)(void* texData, intptr_t texFreeCookie);
 
 	std::string name;
-	const char* formatName = nullptr;
+	std::string formatName;
 private:
 	// elements of texture array or cubemap. if it's just one texture, it's just one element.
 	// if it's a cubemap, it's the (up to) 6 images of the cubemap (according to textureFlags)
@@ -152,7 +152,8 @@ public:
 
 	Texture(const Texture& other) = delete; // if needed we'll need reference counting or similar for texData
 
-	Texture(Texture&& other) : name(std::move(other.name)), formatName(other.formatName),
+	Texture(Texture&& other) : name(std::move(other.name)),
+		formatName(std::move(other.formatName)),
 		elements(std::move(other.elements)), fileType(other.fileType),
 		textureFlags(other.textureFlags), dataFormat(other.dataFormat),
 		glFormat(other.glFormat), glType(other.glType), glTarget(other.glTarget),
@@ -171,8 +172,7 @@ public:
 	Texture& operator=(Texture&& other) {
 		Clear();
 		name = std::move(other.name);
-		formatName = other.formatName;
-		other.formatName = nullptr;
+		formatName = std::move(other.formatName);
 		elements = std::move(other.elements);
 		fileType = other.fileType;
 		dataFormat = other.dataFormat;

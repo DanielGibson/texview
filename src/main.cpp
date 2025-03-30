@@ -603,7 +603,7 @@ static void DrawSidebar(GLFWwindow* window)
 		ImGui::BeginDisabled(true);
 		ImGui::TextWrapped("%s", curTex.name.c_str());
 		ImGui::EndDisabled();
-		ImGui::Text("Format: %s", curTex.formatName);
+		ImGui::Text("Format: %s", curTex.formatName.c_str());
 		float tw, th;
 		curTex.GetSize(&tw, &th);
 		ImGui::Text("Texture Size: %d x %d", (int)tw, (int)th);
