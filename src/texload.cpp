@@ -606,13 +606,13 @@ const UncomprFormatInfo uncomprFormatTable[] = {
 	{ D3DFMT_A2B10G10R10, 0,  GL_RGBA,    GL_RGBA,    GL_UNSIGNED_INT_2_10_10_10_REV,  32, "RGB10A2 UNORM ?" },
 	{ D3DFMT_X1R5G5B5, 0,     GL_RGBA,    GL_BGRA,    GL_UNSIGNED_SHORT_1_5_5_5_REV,    8, "RGB5X1 UNORM", _TF_NOALPHA },
 	{ D3DFMT_X8B8G8R8, 0,     GL_RGBA,    GL_RGBA,    GL_UNSIGNED_BYTE,                32, "RGBX8 UNORM", _TF_NOALPHA },
-	{ D3DFMT_R8G8B8,   0,     GL_BGR,     GL_BGR,     GL_UNSIGNED_BYTE,                24, "BGR8 UNORM" },
+	{ D3DFMT_R8G8B8,   0,     GL_RGB,     GL_BGR,     GL_UNSIGNED_BYTE,                24, "BGR8 UNORM" },
 	// I added D3DFMT_B8G8R8, it's non-standard. we use 220 for it (and so does Gimp), dxwrapper uses 19
 	// (no idea if anyone else uses those values and if they're actually written to any files, but why not try to support them..)
 	{ D3DFMT_B8G8R8,   0,     GL_RGB,     GL_RGB,     GL_UNSIGNED_BYTE,                24, "RGB8 UNORM" }, // gimp variant
 	{ 19,              0,     GL_RGB,     GL_RGB,     GL_UNSIGNED_BYTE,                24, "RGB8 UNORM" }, // dxwrapper variant
 	{ D3DFMT_X4R4G4B4, 0,     GL_RGBA,    GL_RGBA,    GL_UNSIGNED_SHORT_4_4_4_4,       16, "RGBX4 UNORM", _TF_NOALPHA },
-	{ D3DFMT_A8L8, 0,  GL_LUMINANCE_ALPHA,  GL_LUMINANCE_ALPHA,  GL_UNSIGNED_BYTE,     16, "Luminance8 Alpha8" },
+	{ D3DFMT_A8L8,   0,  GL_LUMINANCE_ALPHA,  GL_LUMINANCE_ALPHA,  GL_UNSIGNED_BYTE,   16, "Luminance8 Alpha8" },
 	{ D3DFMT_L16,      0, GL_LUMINANCE, GL_LUMINANCE, GL_UNSIGNED_SHORT,               16, "Luminance16" },
 	{ D3DFMT_L8,       0, GL_LUMINANCE, GL_LUMINANCE, GL_UNSIGNED_BYTE,                 8, "Luminance8" },
 
