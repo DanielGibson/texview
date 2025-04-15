@@ -857,7 +857,11 @@ GLDebugCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei 
 		// GL_DEBUG_SEVERITY_NOTIFICATION_ARB is not in the glad header
 		// (not specified in GL_ARB_debug_output I think?) but drivers send such
 		// messages anyway. I don't want them so just return when getting that value
+#if 01 // allow to quickly enable notification messages as well
 		case 0x826B:  return;
+#else
+		case 0x826B: severityStr = "Severity: Notification"; break;
+#endif
 		SVRCASE(HIGH, "Severity: High")
 		SVRCASE(MEDIUM, "Severity: Medium")
 		SVRCASE(LOW, "Severity: Low")
@@ -912,10 +916,16 @@ int main(int argc, char** argv)
 	}
 #endif
 
+	const char* glDebugEnv = getenv("TEXVIEW_GLDEBUG");
+	bool wantDebugContext = (glDebugEnv != nullptr && atoi(glDebugEnv) != 0);
+
 	// Create window with graphics context
-	const char* glsl_version = "#version 130";
+	const char* glsl_version = "#version 130"; // for ImGui
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+	if(wantDebugContext) {
+		glfwWindowHint(GLFW_CONTEXT_DEBUG, GLFW_TRUE);
+	}
 	glfwWindowHint(GLFW_SRGB_CAPABLE, 1); // FIXME: this doesn't seem to make a difference visually or in behavior?!
 	//glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	glfwWindow = glfwCreateWindow(1280, 720, "Texture Viewer", nullptr, nullptr);
@@ -934,10 +944,12 @@ int main(int argc, char** argv)
 	glfwMakeContextCurrent(glfwWindow);
 	gladLoadGL(glfwGetProcAddress);
 
-	const char* glDebugEnv = getenv("TEXVIEW_GLDEBUG");
-	if(glDebugEnv != nullptr && atoi(glDebugEnv) != 0) {
+	if(wantDebugContext) {
+		int haveDebugContext = glfwGetWindowAttrib(glfwWindow, GLFW_CONTEXT_DEBUG);
 		if(!GLAD_GL_ARB_debug_output) {
 			errprintf( "You set the TEXTVIEW_GLDEBUG environment variable, but GL_ARB_debug_output is not available!\n" );
+		} else if(!haveDebugContext) {
+			errprintf( "You set the TEXTVIEW_GLDEBUG environment variable, but GLFW didn't give us a debug context (for whatever reason)!\n" );
 		} else {
 			errprintf( "You set the TEXTVIEW_GLDEBUG environment variable, enabling OpenGL debug logging\n" );
 			glDebugMessageCallbackARB(GLDebugCallback, NULL);
