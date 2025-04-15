@@ -33,6 +33,8 @@ static ImVec4 clear_color(0.45f, 0.55f, 0.60f, 1.00f);
 // TODO: should probably support more than one texture eventually..
 static texview::Texture curTex;
 
+static GLuint shaderProgram = 0;
+
 static bool showImGuiDemoWindow = false;
 static bool showAboutWindow = false;
 
@@ -89,6 +91,169 @@ static void ZoomFitToWindow(GLFWwindow* window, float tw, float th, bool isCube)
 		transX = isCube ? 0.0 : floor(0.5 * (winW/zh - tw));
 		transY = 0;
 	}
+}
+
+static const char* vertexShaderSrc = R"(
+out vec4 texCoord;
+// TODO: a way to pass cube face num or array slice num? or is texCoord.z(?) stable enough?
+void main()
+{
+	gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
+	texCoord = gl_MultiTexCoord0;
+}
+)";
+
+static const char* fragmentShaderSrc = R"(
+in vec4 texCoord;
+out vec4 OutColor;
+uniform sampler2D tex0;
+void main()
+{
+	OutColor = texture(tex0, texCoord.st); // XXX: 4.0 just to see if shader is actually used
+}
+)";
+
+static GLuint
+CompileShader(GLenum shaderType, const char* shaderSrc, const char* shaderSrc2)
+{
+	GLuint shader = glCreateShader(shaderType);
+
+	const char* version = "#version 150 compatibility\n";
+	const char* sources[3] = { version, shaderSrc, shaderSrc2 };
+	int numSources = shaderSrc2 != NULL ? 3 : 2;
+
+	glShaderSource(shader, numSources, sources, NULL);
+	glCompileShader(shader);
+	GLint status;
+	glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+	if(status != GL_TRUE) {
+		char buf[2048];
+		char* bufPtr = buf;
+		int bufLen = sizeof(buf);
+		GLint infoLogLength;
+		glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &infoLogLength);
+		if(infoLogLength >= bufLen) {
+			bufPtr = (char*)malloc(infoLogLength+1);
+			bufLen = infoLogLength+1;
+			if(bufPtr == NULL) {
+				bufPtr = buf;
+				bufLen = sizeof(buf);
+				errprintf("WARN: In CompileShader(), malloc(%d) failed!\n", infoLogLength+1);
+			}
+		}
+
+		glGetShaderInfoLog(shader, bufLen, NULL, bufPtr);
+
+		const char* shaderTypeStr = "";
+		switch(shaderType)
+		{
+			case GL_VERTEX_SHADER:   shaderTypeStr = "Vertex"; break;
+			case GL_FRAGMENT_SHADER: shaderTypeStr = "Fragment"; break;
+			// I don't think I need geometry or tesselation shaders here
+			// case GL_GEOMETRY_SHADER: shaderTypeStr = "Geometry"; break;
+			/* not supported in OpenGL3.2 and we're unlikely to need/use them anyway
+			case GL_COMPUTE_SHADER:  shaderTypeStr = "Compute"; break;
+			case GL_TESS_CONTROL_SHADER:    shaderTypeStr = "TessControl"; break;
+			case GL_TESS_EVALUATION_SHADER: shaderTypeStr = "TessEvaluation"; break;
+			*/
+		}
+		errprintf("ERROR: Compiling %s Shader failed: %s\n", shaderTypeStr, bufPtr);
+		glDeleteShader(shader);
+
+		if(bufPtr != buf) {
+			free(bufPtr);
+		}
+
+		return 0;
+	}
+
+	return shader;
+}
+
+static GLuint
+CreateShaderProgram(const GLuint shaders[2])
+{
+	GLuint prog = glCreateProgram();
+	if(prog == 0) {
+		errprintf("ERROR: Couldn't create a new Shader Program!\n");
+		return 0;
+	}
+
+	glAttachShader(prog, shaders[0]);
+	glAttachShader(prog, shaders[1]);
+
+	// TODO: glBindAttribLocation() goes here, if needed
+
+	glLinkProgram(prog);
+
+	GLint status;
+	glGetProgramiv(prog, GL_LINK_STATUS, &status);
+	if(status != GL_TRUE) {
+		char buf[2048];
+		char* bufPtr = buf;
+		int bufLen = sizeof(buf);
+		GLint infoLogLength;
+		glGetProgramiv(prog, GL_INFO_LOG_LENGTH, &infoLogLength);
+		if(infoLogLength >= bufLen) {
+			bufPtr = (char*)malloc(infoLogLength+1);
+			bufLen = infoLogLength+1;
+			if(bufPtr == NULL) {
+				bufPtr = buf;
+				bufLen = sizeof(buf);
+				errprintf("WARN: In CreateShaderProgram(), malloc(%d) failed!\n", infoLogLength+1);
+			}
+		}
+
+		glGetProgramInfoLog(prog, bufLen, NULL, bufPtr);
+
+		errprintf("ERROR: Linking shader program failed: %s\n", bufPtr);
+
+		glDeleteProgram(prog);
+
+		if(bufPtr != buf) {
+			free(bufPtr);
+		}
+		glDetachShader(prog, shaders[0]);
+		glDetachShader(prog, shaders[1]);
+
+		return 0;
+	}
+
+	return prog;
+}
+
+static bool UpdateShaders()
+{
+	GLuint shaders[2] = {};
+	shaders[0] = CompileShader(GL_VERTEX_SHADER, vertexShaderSrc, nullptr);
+	if(shaders[0] == 0) {
+		return false;
+	}
+	shaders[1] = CompileShader(GL_FRAGMENT_SHADER, fragmentShaderSrc, nullptr);
+	if(shaders[0] == 0) {
+		glDeleteShader(shaders[0]);
+		return false;
+	}
+
+	GLuint prog = CreateShaderProgram(shaders);
+
+	// The shaders aren't needed anymore once they're linked into the program
+	glDeleteShader(shaders[0]);
+	glDeleteShader(shaders[1]);
+	if(prog == 0) {
+		return false;
+	}
+
+	if(shaderProgram != 0) { // if we already had one and want to replace it
+		glDeleteProgram(shaderProgram);
+	}
+
+	shaderProgram = prog;
+
+	glUseProgram(shaderProgram);
+	// TODO: could set uniforms here
+
+	return true;
 }
 
 // mipLevel -1 = auto (let GPU choose from all levels)
@@ -190,6 +355,8 @@ static void LoadTexture(const char* path)
 
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+	UpdateShaders();
 }
 
 // mipLevel -1 == use configured mipmapLevel
@@ -339,6 +506,8 @@ static void DrawTexture()
 		glEnable( GL_FRAMEBUFFER_SRGB );
 	else
 		glDisable( GL_FRAMEBUFFER_SRGB );
+
+	glUseProgram(shaderProgram);
 
 	float texW, texH;
 	tex.GetSize(&texW, &texH);
@@ -1015,6 +1184,10 @@ int main(int argc, char** argv)
 		ImGuiFrame(glfwWindow);
 
 		glfwSwapBuffers(glfwWindow);
+	}
+
+	if(shaderProgram != 0) { // if we already had one and want to replace it
+		glDeleteProgram(shaderProgram);
 	}
 
 	curTex.Clear(); // also frees opengl texture which must happen before shutdown

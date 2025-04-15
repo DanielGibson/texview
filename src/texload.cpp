@@ -333,7 +333,7 @@ bool Texture::LoadKTX(MemMappedFile* mmf, const char* filename)
 		}
 	}
 	name = filename;
-	// TODO: would be nicer maybe to prepend "KTX" and maybe to use GL-like names like the DDS loader does
+	// TODO: maybe using GL-like names like the DDS loader uses would be nicer?
 	//   for that https://github.com/KhronosGroup/KTX-Specification/blob/main/formats.json could help
 	formatName = (ktxTex->classId == ktxTexture2_c) ? "KTX2 " : "KTX ";
 	formatName += ktxTexture_GetFormatName(ktxTex);
