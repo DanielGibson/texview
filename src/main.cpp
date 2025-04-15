@@ -56,6 +56,9 @@ static int overrideAlpha = -1; // -1: auto, 0: force disable alpha blending, 1: 
 
 static int cubeCrossVariant = 0; // 0-3
 static int textureArrayIndex = 0;
+static std::string swizzle;
+static char simpleSwizzle[5] = {};
+static bool useSimpleSwizzle = true;
 
 static enum ViewMode {
 	SINGLE,
@@ -233,6 +236,55 @@ CreateShaderProgram(const GLuint shaders[2])
 	return prog;
 }
 
+static void SetSwizzleFromSimple()
+{
+	if(simpleSwizzle[0] == '\0') {
+		swizzle.clear();
+		return;
+	}
+	const char* args[4] = { "0.0", "0.0", "0.0", "1.0" };
+	for(int i=0; i<4; ++i) {
+		char c = simpleSwizzle[i];
+		if(c >= 'A' && c <= 'Z') {
+			c += 32; // to lowercase
+		}
+		switch(c) {
+			case '0':
+				args[i] = "0.0";
+				break;
+			case '1':
+				args[i] = "1.0";
+				break;
+			case 'r':
+			case 'x':
+				args[i] = "c.r";
+				break;
+			case 'g':
+			case 'y':
+				args[i] = "c.g";
+				break;
+			case 'b':
+			case 'z':
+				args[i] = "c.b";
+				break;
+			case 'a':
+			case 'w':
+				args[i] = "c.a";
+				break;
+			case '\0':
+				// leave this and following at default value (0.0 or 1.0)
+				// make sure the loop is terminated here, string is over
+				i = 4;
+				break;
+			default:
+				errprintf("Invalid character '%c' in swizzle!\n", simpleSwizzle[i]);
+		}
+	}
+	char buf[128] = {};
+	snprintf(buf, sizeof(buf), "	c = vec4( %s, %s, %s, %s );\n", args[0], args[1], args[2], args[3]);
+	swizzle = buf;
+}
+
 static bool UpdateShaders()
 {
 	const char* glslVersion = "#version 150 compatibility\n";
@@ -282,7 +334,9 @@ static bool UpdateShaders()
 		         numTexCoords, "stpq");
 	}
 
-	std::string swizzle; // TODO: let user configure swizzle, set useful default for RXGB-like types
+	if(useSimpleSwizzle) {
+		SetSwizzleFromSimple();
+	}
 
 	std::initializer_list<const char*> fragShaderSrc = {
 		glslVersion,
@@ -421,6 +475,9 @@ static void LoadTexture(const char* path)
 
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+	simpleSwizzle[0] = '\0'; // no swizzling by default
+	useSimpleSwizzle = true;
 
 	UpdateShaders();
 }
@@ -954,6 +1011,31 @@ static void DrawSidebar(GLFWwindow* window)
 			overrideAlpha = alpha - 1;
 		}
 		ImGui::SetItemTooltip("Enable/Disable Alpha Blending");
+
+		if(useSimpleSwizzle) {
+			ImGuiInputTextFlags swizzleInputFlags = ImGuiInputTextFlags_CallbackCharFilter;
+			ImGuiInputTextCallback swizzleInputCB = [](ImGuiInputTextCallbackData* data) -> int {
+				// according to the documentation, returning 1 here skips the char
+				// probably returning 0 means "use it, it's valid"
+				const char* validChars = "rgbaRGBAxyzwXYZW01";
+				int c = data->EventChar;
+				if(c < '0' || c > 'z') {
+					return 1; // definitely invalid
+				}
+				return strchr(validChars, c) == nullptr;
+			};
+			if( ImGui::InputText("Swizzle", simpleSwizzle, sizeof(simpleSwizzle), swizzleInputFlags, swizzleInputCB) ) {
+				UpdateShaders();
+			}
+			ImGui::SetItemTooltip("Swizzles the color channels. Four characters,\n"
+			                      "for the Red, Green, Blue and Alpha channels.\n"
+			                      "Valid characters: r, g, b, a, x, y, z, w, 0, 1\n"
+			                      "0 and 1 set the color channel to that value,\n"
+			                      "the others set the color channel to the value of the given channel.\n"
+			                      "Default: \"rgba\"\n");
+		}
+		// TODO: else: advanced swizzle (let user input text for swizzle directly => arbitrary GLSL)
+
 
 		ImGui::Spacing(); ImGui::Spacing();
 
