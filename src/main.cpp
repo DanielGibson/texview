@@ -112,15 +112,17 @@ static const char* fragShaderStart = R"(
 in vec4 texCoord;
 out vec4 OutColor;
 void main()
-{)";
+{
+)";
 
-static const char* fragShaderSampleTexVec2 = "	OutColor = texture(tex0, texCoord.st);\n";
-static const char* fragShaderSampleTexVec3 = "	OutColor = texture(tex0, texCoord.stp);\n"; // cubemap or tex3D array of tex2D
-static const char* fragShaderSampleTexVec4 = "	OutColor = texture(tex0, texCoord);\n"; // cubemap array
+// ... here UpdateShaders() adds a line like "	vec4 c = texture(tex0, texCoord.st);\n"
+// ... at this point swizzling could happen ("	c = c.agbr;") - generate that dynamically
 
-// at this point swizzling could happen ("	OutColor = OutColor.agbr;") - generate that dynamically
-
-static const char* fragShaderEnd = "\n}\n";
+static const char* fragShaderEnd =  R"(
+	OutColor = c;
+}
+)";
+//"\n}\n";
 
 static GLuint
 CompileShader(GLenum shaderType, std::initializer_list<const char*> shaderSources)
@@ -162,6 +164,11 @@ CompileShader(GLenum shaderType, std::initializer_list<const char*> shaderSource
 			*/
 		}
 		errprintf("ERROR: Compiling %s Shader failed: %s\n", shaderTypeStr, bufPtr);
+		errprintf("Source BEGIN\n");
+		for(const char* part : shaderSources) {
+			errprintf("%s", part);
+		}
+		errprintf("\nSource END\n");
 		glDeleteShader(shader);
 
 		if(bufPtr != buf) {
@@ -236,29 +243,54 @@ static bool UpdateShaders()
 		return false;
 	}
 
-	// TODO: isampler2D for integer texture, usampler2D for unsigned integer texture
-	const char* samplerUniform = "uniform sampler2D tex0;\n";
-	const char* sampleTexture = fragShaderSampleTexVec2;
-	if(curTex.IsCubemap()) {
-		if(curTex.IsArray()) {
-			samplerUniform = "uniform samplerCubeArray tex0;\n";
-			sampleTexture = fragShaderSampleTexVec4;
-		} else {
-			samplerUniform = "uniform samplerCube tex0;\n";
-			sampleTexture = fragShaderSampleTexVec3;
-		}
-	} else if(curTex.IsArray()) {
-		samplerUniform = "uniform sampler2DArray tex0;\n";
-		sampleTexture = fragShaderSampleTexVec3;
+	bool isUnsigned = false;
+	const char* normDiv = curTex.GetIntTexInfo(isUnsigned); // divisor to normalize integer texture
+	bool isIntTexture = normDiv != nullptr;
+
+	const char* samplerBaseType = "sampler2D";
+	int numTexCoords = 2; // default: Texture2D; 2 for .st, 3 for .stp, 4 for stpq (1 for .s once supporting texture1D)
+	const char* typePrefix = ""; // default: standard texture (not _INTEGER)
+	const char* typePostfix = ""; // default: no array texture
+	if(isIntTexture) {
+		typePrefix = isUnsigned ? "u" : "i";
 	}
+	if(curTex.IsCubemap()) {
+		samplerBaseType = "samplerCube";
+		numTexCoords = 3;
+	}
+	if(curTex.IsArray()) {
+		typePostfix = "Array";
+		numTexCoords++;
+	}
+
+	char samplerUniform[48] = {};
+	snprintf(samplerUniform, sizeof(samplerUniform), "uniform %s%s%s tex0;\n", typePrefix, samplerBaseType, typePostfix);
+
+	char sampleTexture[48] = {0};
+	char normalization[64] = "\n"; // by default nothing needs to be done
+
+	if(isIntTexture) {
+		snprintf(sampleTexture, sizeof(sampleTexture),
+		         "	%svec4 v = texture( tex0, texCoord.%.*s );\n",
+		         typePrefix, numTexCoords, "stpq");
+		// integer textures (GL_RGB_INTEGER etc) need normalization to display something useful
+		snprintf(normalization, sizeof(normalization), "	vec4 c = vec4(v) / %s;\n", normDiv);
+	} else {
+		// normal textures don't need normalization, so assign to vec4 c directly
+		snprintf(sampleTexture, sizeof(sampleTexture),
+		         "	vec4 c = texture( tex0, texCoord.%.*s );\n",
+		         numTexCoords, "stpq");
+	}
+
+	std::string swizzle; // TODO: let user configure swizzle, set useful default for RXGB-like types
 
 	std::initializer_list<const char*> fragShaderSrc = {
 		glslVersion,
 		samplerUniform,
 		fragShaderStart,
 		sampleTexture,
-		// TODO: for (unsigned) integer textures, could normalize here?
-		// TODO: could swizzle here
+		normalization,
+		swizzle.c_str(),
 		fragShaderEnd
 	};
 	shaders[1] = CompileShader(GL_FRAGMENT_SHADER, fragShaderSrc );

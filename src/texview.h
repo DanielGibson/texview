@@ -257,6 +257,10 @@ public:
 			*h = h_;
 	}
 
+	// returns NULL if not an _INTEGER texture
+	// otherwise it returns a string with the divisor to normalize the components in GLSL
+	const char* GetIntTexInfo(bool& isUnsigned);
+
 private:
 	bool LoadDDS(MemMappedFile* mmf, const char* filename);
 	bool LoadKTX(MemMappedFile* mmf, const char* filename);

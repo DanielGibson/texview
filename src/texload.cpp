@@ -183,6 +183,63 @@ Texture::~Texture() {
 	}
 }
 
+const char* Texture::GetIntTexInfo(bool& isUnsigned)
+{
+	static const uint32_t glIntegerFormats[] = {
+		GL_RED_INTEGER,
+		GL_RG_INTEGER,
+		GL_RGB_INTEGER,
+		GL_RGBA_INTEGER,
+		GL_BGR_INTEGER,
+		GL_BGRA_INTEGER,
+		GL_ALPHA_INTEGER,
+		GL_GREEN_INTEGER,
+		GL_BLUE_INTEGER,
+	};
+
+	bool isInt = false;
+	uint32_t glFmt = glFormat;
+	for(uint32_t fmt : glIntegerFormats) {
+		if(glFmt == fmt) {
+			isInt = true;
+			break;
+		}
+	}
+	if(!isInt) {
+		return nullptr;
+	}
+	const char* ret = "256.0";
+	isUnsigned = false;
+	switch(glType) {
+		case GL_UNSIGNED_BYTE:
+			isUnsigned = true;
+			ret = "256.0";
+			break;
+		case GL_UNSIGNED_SHORT:
+			isUnsigned = true;
+			ret = "65535.0";
+			break;
+		case GL_UNSIGNED_INT:
+			isUnsigned = true;
+			ret = "4294967295.0";
+			break;
+		case GL_RGB10_A2UI:
+			isUnsigned = true;
+			ret = "vec4(1023.0, 1023.0, 1023.0, 3.0)";
+			break;
+		case GL_BYTE:
+			ret = "127.0";
+			break;
+		case GL_SHORT:
+			ret = "32767.0";
+			break;
+		case GL_INT:
+			ret = "2147483647.0";
+			break;
+	}
+	return ret;
+}
+
 bool Texture::Load(const char* filename)
 {
 	Clear();
