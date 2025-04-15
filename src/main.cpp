@@ -55,6 +55,7 @@ static int overrideSRGB = -1; // -1: auto, 0: force disable, 1: force enable
 static int overrideAlpha = -1; // -1: auto, 0: force disable alpha blending, 1: force enable
 
 static int cubeCrossVariant = 0; // 0-3
+static int textureArrayIndex = 0;
 
 static enum ViewMode {
 	SINGLE,
@@ -384,6 +385,8 @@ static void LoadTexture(const char* path)
 		spacingBetweenMips = 2;
 	}
 
+	textureArrayIndex = 0;
+
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -391,8 +394,9 @@ static void LoadTexture(const char* path)
 }
 
 // mipLevel -1 == use configured mipmapLevel
-static void DrawQuad(texview::Texture& texture, int mipLevel, ImVec2 pos, ImVec2 size, ImVec2 texCoordMax = ImVec2(1, 1), ImVec2 texCoordMin = ImVec2(0, 0))
+static void DrawQuad(texview::Texture& texture, int mipLevel, int arrayIndex, ImVec2 pos, ImVec2 size, ImVec2 texCoordMax = ImVec2(1, 1))
 {
+	ImVec2 texCoordMin = ImVec2(0, 0);
 	GLuint tex = texture.glTextureHandle;
 	if(tex) {
 
@@ -400,29 +404,32 @@ static void DrawQuad(texview::Texture& texture, int mipLevel, ImVec2 pos, ImVec2
 
 		SetMipmapLevel(texture, (mipLevel < 0) ? mipmapLevel : mipLevel, false);
 
+		float idx = arrayIndex;
+
 		glBegin(GL_QUADS);
-			glTexCoord2f(texCoordMin.x, texCoordMin.y);
+			glTexCoord3f(texCoordMin.x, texCoordMin.y, idx);
 			glVertex2f(pos.x, pos.y);
 
-			glTexCoord2f(texCoordMin.x, texCoordMax.y);
+			glTexCoord3f(texCoordMin.x, texCoordMax.y, idx);
 			glVertex2f(pos.x, pos.y + size.y);
 
-			glTexCoord2f(texCoordMax.x, texCoordMax.y);
+			glTexCoord3f(texCoordMax.x, texCoordMax.y, idx);
 			glVertex2f(pos.x + size.x, pos.y + size.y);
 
-			glTexCoord2f(texCoordMax.x, texCoordMin.y);
+			glTexCoord3f(texCoordMax.x, texCoordMin.y, idx);
 			glVertex2f(pos.x + size.x, pos.y);
 		glEnd();
 	}
 }
 
-struct vec3 {
+struct vec4 {
 	union {
-		struct { float x, y, z; };
-		float vals[3];
+		struct { float x, y, z, w; };
+		float vals[4];
 	};
-	vec3() = default;
-	vec3(float x_, float y_, float z_ = 0.0f) : x(x_), y(y_), z(z_) {}
+	vec4() = default;
+	vec4(float x_, float y_, float z_ = 0.0f, float w_ = 0.0f)
+	: x(x_), y(y_), z(z_), w(w_) {}
 };
 enum CubeFaceIndex {
 	FI_XPOS = 0,
@@ -434,8 +441,10 @@ enum CubeFaceIndex {
 };
 
 // mipLevel -1 == use configured mipmapLevel
-static void DrawCubeQuad(texview::Texture& texture, int mipLevel, int faceIndex, ImVec2 pos, ImVec2 size, ImVec2 texCoordMax = ImVec2(1, 1), ImVec2 texCoordMin = ImVec2(0, 0))
+static void DrawCubeQuad(texview::Texture& texture, int mipLevel, int faceIndex, int arrayIndex, ImVec2 pos, ImVec2 size, ImVec2 texCoordMax = ImVec2(1, 1))
 {
+	ImVec2 texCoordMin = ImVec2(0, 0);
+
 	GLuint tex = texture.glTextureHandle;
 	if(tex) {
 
@@ -451,7 +460,7 @@ static void DrawCubeQuad(texview::Texture& texture, int mipLevel, int faceIndex,
 		texCoordMax.x = texCoordMax.x * 2.0f - 1.0f;
 		texCoordMax.y = texCoordMax.y * 2.0f - 1.0f;
 
-		vec3 mapCoords[4] = {
+		vec4 mapCoords[4] = {
 			// initialize with x, y coordinates (or s,t or whatever)
 			{ texCoordMin.x, texCoordMin.y },
 			{ texCoordMin.x, texCoordMax.y },
@@ -459,34 +468,35 @@ static void DrawCubeQuad(texview::Texture& texture, int mipLevel, int faceIndex,
 			{ texCoordMax.x, texCoordMin.y }
 		};
 
-		for(vec3& mc : mapCoords) {
-			vec3 tmp;
+		for(vec4& mc : mapCoords) {
+			vec4 tmp;
 			switch(faceIndex) {
 				case FI_XPOS:
-					tmp = vec3( 1.0f, -mc.y, -mc.x );
+					tmp = vec4( 1.0f, -mc.y, -mc.x );
 					break;
 				case FI_XNEG:
-					tmp = vec3( -1.0f, -mc.y, mc.x );
+					tmp = vec4( -1.0f, -mc.y, mc.x );
 					break;
 				case FI_YPOS:
-					tmp = vec3( mc.x, 1.0f, mc.y );
+					tmp = vec4( mc.x, 1.0f, mc.y );
 					break;
 				case FI_YNEG:
-					tmp = vec3( mc.x, -1.0f, -mc.y );
+					tmp = vec4( mc.x, -1.0f, -mc.y );
 					break;
 				case FI_ZPOS:
-					tmp = vec3( mc.x, -mc.y, 1.0f );
+					tmp = vec4( mc.x, -mc.y, 1.0f );
 					break;
 				case FI_ZNEG:
-					tmp = vec3( -mc.x, -mc.y, -1.0f );
+					tmp = vec4( -mc.x, -mc.y, -1.0f );
 					break;
 			}
 			mc = tmp;
+			mc.w = arrayIndex;
 		}
 
 		if(cubeCrossVariant > 0 && (faceIndex == FI_YPOS || faceIndex == FI_YNEG)) {
 			int rotationSteps = (faceIndex == FI_YPOS) ? cubeCrossVariant : (4 - cubeCrossVariant);
-			vec3 mapCoordsCopy[4];
+			vec4 mapCoordsCopy[4];
 			for(int i=0; i<4; ++i) {
 				mapCoordsCopy[i] = mapCoords[ (i+rotationSteps) % 4 ];
 			}
@@ -494,16 +504,16 @@ static void DrawCubeQuad(texview::Texture& texture, int mipLevel, int faceIndex,
 		}
 
 		glBegin(GL_QUADS);
-			glTexCoord3fv(mapCoords[0].vals);
+			glTexCoord4fv(mapCoords[0].vals);
 			glVertex2f(pos.x, pos.y);
 
-			glTexCoord3fv(mapCoords[1].vals);
+			glTexCoord4fv(mapCoords[1].vals);
 			glVertex2f(pos.x, pos.y + size.y);
 
-			glTexCoord3fv(mapCoords[2].vals);
+			glTexCoord4fv(mapCoords[2].vals);
 			glVertex2f(pos.x + size.x, pos.y + size.y);
 
-			glTexCoord3fv(mapCoords[3].vals);
+			glTexCoord4fv(mapCoords[3].vals);
 			glVertex2f(pos.x + size.x, pos.y);
 		glEnd();
 	}
@@ -520,6 +530,8 @@ static void DrawTexture()
 		glEnable(GL_BLEND);
 	else
 		glDisable(GL_BLEND);
+
+	int arrayIndex = textureArrayIndex;
 
 	// this whole SRGB thing confuses me.. if the gl texture has an SRGB format
 	// (like GL_SRGB_ALPHA), it must have GL_FRAMEBUFFER_SRGB enabled for drawing.
@@ -553,32 +565,32 @@ static void DrawTexture()
 		float posX = offset;
 		float posY = 0.0f;
 		const ImVec2 size(texW, texH);
-		DrawCubeQuad(tex, -1, FI_YPOS, ImVec2(posX, posY), size);
+		DrawCubeQuad(tex, -1, FI_YPOS, arrayIndex, ImVec2(posX, posY), size);
 
 		posX = 0.0f;
 		posY += offset;
 		const int middleIndices[4] = { FI_XNEG, FI_ZPOS, FI_XPOS, FI_ZNEG };
 		for(int i=cubeCrossVariant, n=cubeCrossVariant+4; i < n; ++i) {
 			int faceIndex = middleIndices[i % 4];
-			DrawCubeQuad(tex, -1, faceIndex, ImVec2(posX, posY), size);
+			DrawCubeQuad(tex, -1, faceIndex, arrayIndex, ImVec2(posX, posY), size);
 			posX += offset;
 		}
 		posX = offset;
 		posY += offset;
 
-		DrawCubeQuad(tex, -1, FI_YNEG, ImVec2(posX, posY), size);
+		DrawCubeQuad(tex, -1, FI_YNEG, arrayIndex, ImVec2(posX, posY), size);
 
 		glDisable( GL_FRAMEBUFFER_SRGB ); // make sure it's disabled or ImGui will look wrong
 		return;
 	}
 
 	if(viewMode == SINGLE) {
-		DrawQuad(tex, -1, ImVec2(0, 0), ImVec2(texW, texH));
+		DrawQuad(tex, -1, arrayIndex, ImVec2(0, 0), ImVec2(texW, texH));
 	} else if(viewMode == TILED) {
 		float tilesX = numTiles[0];
 		float tilesY = numTiles[1];
 		ImVec2 size(texW*tilesX, texH*tilesY);
-		DrawQuad(tex, -1, ImVec2(0, 0), size, ImVec2(tilesX, tilesY));
+		DrawQuad(tex, -1, arrayIndex, ImVec2(0, 0), size, ImVec2(tilesX, tilesY));
 	} else if(viewAtSameSize) {
 		int numMips = tex.GetNumMips();
 		if(viewMode == MIPMAPS_COMPACT) {
@@ -591,7 +603,7 @@ static void DrawTexture()
 			float vOffset = texH + spacingBetweenMips;
 			int rowNum = 0;
 			for(int i=0; i < numMips; ++i) {
-				DrawQuad(tex, i, ImVec2(posX, posY), ImVec2(texW, texH));
+				DrawQuad(tex, i, arrayIndex, ImVec2(posX, posY), ImVec2(texW, texH));
 				if(((i+1) % numHor) == 0) {
 					posY += vOffset;
 					// change horizontal direction every line
@@ -609,7 +621,7 @@ static void DrawTexture()
 			float posX = 0.0f;
 			float posY = 0.0f;
 			for(int i=0; i < numMips; ++i) {
-				DrawQuad(tex, i, ImVec2(posX, posY), ImVec2(texW, texH));
+				DrawQuad(tex, i, arrayIndex, ImVec2(posX, posY), ImVec2(texW, texH));
 				posX += hOffset;
 				posY += vOffset;
 			}
@@ -635,7 +647,7 @@ static void DrawTexture()
 			for(int i=0; i < numMips; ++i) {
 				float w, h;
 				tex.GetMipSize(i, &w, &h);
-				DrawQuad(tex, i, ImVec2(posX, posY), ImVec2(w, h));
+				DrawQuad(tex, i, arrayIndex, ImVec2(posX, posY), ImVec2(w, h));
 
 				if( (toRight && (i & 1) == 0)
 				   || (!toRight && (i & 1) == 1) ) {
@@ -654,7 +666,7 @@ static void DrawTexture()
 			for(int i=0; i < numMips; ++i) {
 				float w, h;
 				tex.GetMipSize(i, &w, &h);
-				DrawQuad(tex, i, ImVec2(posX, posY), ImVec2(w, h));
+				DrawQuad(tex, i, arrayIndex, ImVec2(posX, posY), ImVec2(w, h));
 				if(inRow) {
 					posX += spacingBetweenMips + w;
 				} else {
@@ -873,11 +885,17 @@ static void DrawSidebar(GLFWwindow* window)
 					snprintf(miplevelStrBuf, sizeof(miplevelStrBuf), "%d (%dx%d)",
 					         mipLevel, (int)w, (int)h);
 				}
-				if(ImGui::SliderInt("Mip Level", &mipLevel, -1, maxLevel, miplevelString)) {
+				if(ImGui::SliderInt("Mip Level", &mipLevel, -1, maxLevel,
+				                    miplevelString, ImGuiSliderFlags_AlwaysClamp)) {
 					mipmapLevel = mipLevel;
 					SetMipmapLevel(curTex, mipLevel);
 				}
 			}
+		}
+		if(curTex.IsArray()) {
+			int numElems = curTex.GetNumElements();
+			ImGui::SliderInt("Array Index", &textureArrayIndex, 0, numElems-1,
+			                 "%d", ImGuiSliderFlags_AlwaysClamp);
 		}
 
 		ImGui::Spacing();
@@ -1143,11 +1161,11 @@ int main(int argc, char** argv)
 	if(wantDebugContext) {
 		int haveDebugContext = glfwGetWindowAttrib(glfwWindow, GLFW_CONTEXT_DEBUG);
 		if(!GLAD_GL_ARB_debug_output) {
-			errprintf( "You set the TEXTVIEW_GLDEBUG environment variable, but GL_ARB_debug_output is not available!\n" );
+			errprintf( "You set the TEXVIEW_GLDEBUG environment variable, but GL_ARB_debug_output is not available!\n" );
 		} else if(!haveDebugContext) {
-			errprintf( "You set the TEXTVIEW_GLDEBUG environment variable, but GLFW didn't give us a debug context (for whatever reason)!\n" );
+			errprintf( "You set the TEXVIEW_GLDEBUG environment variable, but GLFW didn't give us a debug context (for whatever reason)!\n" );
 		} else {
-			errprintf( "You set the TEXTVIEW_GLDEBUG environment variable, enabling OpenGL debug logging\n" );
+			errprintf( "You set the TEXVIEW_GLDEBUG environment variable, enabling OpenGL debug logging\n" );
 			glDebugMessageCallbackARB(GLDebugCallback, NULL);
 			glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB);
 		}
