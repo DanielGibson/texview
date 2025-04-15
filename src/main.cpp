@@ -21,6 +21,8 @@
 #include <math.h>
 #include <stdio.h>
 
+#include <initializer_list>
+
 #include "texview.h"
 
 #include "data/texview_icon.h"
@@ -103,26 +105,27 @@ void main()
 }
 )";
 
-static const char* fragmentShaderSrc = R"(
+// Note: before this something like "uniform sampler2D tex0;" is needed,
+//       setting that in UpdateShaders() based on type
+static const char* fragShaderStart = R"(
 in vec4 texCoord;
 out vec4 OutColor;
-uniform sampler2D tex0;
 void main()
-{
-	OutColor = texture(tex0, texCoord.st); // XXX: 4.0 just to see if shader is actually used
-}
-)";
+{)";
+
+static const char* fragShaderSampleTexVec2 = "	OutColor = texture(tex0, texCoord.st);\n";
+static const char* fragShaderSampleTexVec3 = "	OutColor = texture(tex0, texCoord.stp);\n"; // cubemap or tex3D array of tex2D
+static const char* fragShaderSampleTexVec4 = "	OutColor = texture(tex0, texCoord);\n"; // cubemap array
+
+// at this point swizzling could happen ("	OutColor = OutColor.agbr;") - generate that dynamically
+
+static const char* fragShaderEnd = "\n}\n";
 
 static GLuint
-CompileShader(GLenum shaderType, const char* shaderSrc, const char* shaderSrc2)
+CompileShader(GLenum shaderType, std::initializer_list<const char*> shaderSources)
 {
 	GLuint shader = glCreateShader(shaderType);
-
-	const char* version = "#version 150 compatibility\n";
-	const char* sources[3] = { version, shaderSrc, shaderSrc2 };
-	int numSources = shaderSrc2 != NULL ? 3 : 2;
-
-	glShaderSource(shader, numSources, sources, NULL);
+	glShaderSource(shader, shaderSources.size(), shaderSources.begin(), NULL);
 	glCompileShader(shader);
 	GLint status;
 	glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
@@ -224,13 +227,41 @@ CreateShaderProgram(const GLuint shaders[2])
 
 static bool UpdateShaders()
 {
+	const char* glslVersion = "#version 150 compatibility\n";
+
 	GLuint shaders[2] = {};
-	shaders[0] = CompileShader(GL_VERTEX_SHADER, vertexShaderSrc, nullptr);
+	shaders[0] = CompileShader(GL_VERTEX_SHADER, { glslVersion, vertexShaderSrc });
 	if(shaders[0] == 0) {
 		return false;
 	}
-	shaders[1] = CompileShader(GL_FRAGMENT_SHADER, fragmentShaderSrc, nullptr);
-	if(shaders[0] == 0) {
+
+	// TODO: isampler2D for integer texture, usampler2D for unsigned integer texture
+	const char* samplerUniform = "uniform sampler2D tex0;\n";
+	const char* sampleTexture = fragShaderSampleTexVec2;
+	if(curTex.IsCubemap()) {
+		if(curTex.IsArray()) {
+			samplerUniform = "uniform samplerCubeArray tex0;\n";
+			sampleTexture = fragShaderSampleTexVec4;
+		} else {
+			samplerUniform = "uniform samplerCube tex0;\n";
+			sampleTexture = fragShaderSampleTexVec3;
+		}
+	} else if(curTex.IsArray()) {
+		samplerUniform = "uniform sampler2DArray tex0;\n";
+		sampleTexture = fragShaderSampleTexVec3;
+	}
+
+	std::initializer_list<const char*> fragShaderSrc = {
+		glslVersion,
+		samplerUniform,
+		fragShaderStart,
+		sampleTexture,
+		// TODO: for (unsigned) integer textures, could normalize here?
+		// TODO: could swizzle here
+		fragShaderEnd
+	};
+	shaders[1] = CompileShader(GL_FRAGMENT_SHADER, fragShaderSrc );
+	if(shaders[1] == 0) {
 		glDeleteShader(shaders[0]);
 		return false;
 	}
@@ -365,7 +396,6 @@ static void DrawQuad(texview::Texture& texture, int mipLevel, ImVec2 pos, ImVec2
 	GLuint tex = texture.glTextureHandle;
 	if(tex) {
 
-		glEnable(texture.glTarget);
 		glBindTexture(texture.glTarget, tex);
 
 		SetMipmapLevel(texture, (mipLevel < 0) ? mipmapLevel : mipLevel, false);
@@ -409,7 +439,6 @@ static void DrawCubeQuad(texview::Texture& texture, int mipLevel, int faceIndex,
 	GLuint tex = texture.glTextureHandle;
 	if(tex) {
 
-		glEnable(texture.glTarget);
 		glBindTexture(texture.glTarget, tex);
 
 		SetMipmapLevel(texture, (mipLevel < 0) ? mipmapLevel : mipLevel, false);
@@ -540,7 +569,6 @@ static void DrawTexture()
 		DrawCubeQuad(tex, -1, FI_YNEG, ImVec2(posX, posY), size);
 
 		glDisable( GL_FRAMEBUFFER_SRGB ); // make sure it's disabled or ImGui will look wrong
-		glDisable(tex.glTarget);
 		return;
 	}
 
@@ -638,7 +666,6 @@ static void DrawTexture()
 		}
 	}
 
-	glDisable(tex.glTarget);
 	glDisable( GL_FRAMEBUFFER_SRGB ); // make sure it's disabled or ImGui will look wrong
 }
 
