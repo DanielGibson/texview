@@ -1024,7 +1024,10 @@ bool Texture::LoadDDS(MemMappedFile* mmf, const char* filename)
 		dx10header = (const DDS_HEADER_DXT10*)(data + dataOffset);
 		dataOffset += sizeof(DDS_HEADER_DXT10);
 		dxgiFmt = dx10header->dxgiFormat;
-		dx10misc2 = (dx10header->miscFlags2 & 7); // lowest 3 bits
+		// this check works around broken DDS files from GLI...
+		if(dx10header->miscFlags2 != UINT32_MAX) {
+			dx10misc2 = (dx10header->miscFlags2 & 7); // lowest 3 bits
+		}
 	}
 	// https://learn.microsoft.com/en-us/windows/win32/direct3ddds/dx-graphics-dds-pguide#dds-file-layout
 	// says that pitch should be computed like:
@@ -1137,7 +1140,8 @@ bool Texture::LoadDDS(MemMappedFile* mmf, const char* filename)
 		// => leftshift the DDS mask by 16 to translate
 		ourFlags |= uint32_t(header->dwCaps2 & DDSCAPS2_CUBEMAP_MASK) << 16;
 		numCubeFaces = NumBitsSet(header->dwCaps2 & DDSCAPS2_CUBEMAP_MASK);
-	} else if(dx10header != nullptr && (dx10header->miscFlag & DDS_DX10MISC_TEXTURECUBE)) {
+	} else if(dx10header != nullptr && (dx10header->miscFlag & DDS_DX10MISC_TEXTURECUBE)
+	          && dx10header->miscFlag != UINT32_MAX) { // this check is for broken DDS files from GLI
 		// if I understand correctly, DX10 DDS files with cubemaps always have all 6 faces
 		isCubemap = true;
 		numCubeFaces = 6;
@@ -1145,7 +1149,9 @@ bool Texture::LoadDDS(MemMappedFile* mmf, const char* filename)
 	}
 
 	int numElements = 1;
-	if(dx10header != nullptr && (dx10header->arraySize > 1)) {
+	// some kind of sanity check for the array size, there was a texture that had 0xffffffff set..
+	if( dx10header != nullptr && (dx10header->arraySize > 1)
+	    && (dx10header->arraySize < 0xfffff /* about 1 mio */) ) {
 		numElements = dx10header->arraySize;
 		ourFlags |= TF_IS_ARRAY;
 		glTarget = isCubemap ? GL_TEXTURE_CUBE_MAP_ARRAY : GL_TEXTURE_2D_ARRAY;
@@ -1180,9 +1186,16 @@ bool Texture::LoadDDS(MemMappedFile* mmf, const char* filename)
 			}
 			const unsigned char* dataNext = dataCur + mipSize;
 			if(dataNext > dataEnd) {
-				errprintf("MipMap level %d for '%s' is incomplete (file too small, %u bytes left, are at %u bytes from start) mipSize: %u w: %d h: %d!\n",
-						i, filename, unsigned(dataEnd - dataCur), unsigned(dataCur-data), mipSize, mipW, mipH);
-				return (i > 0); // if we loaded at least one mipmap we can display the file despite the error
+				errprintf("MipMap level %d of image %d for '%s' is incomplete (file too small, %u bytes left, are at %u bytes from start) mipSize: %u w: %d h: %d!\n",
+						i, e, filename, unsigned(dataEnd - dataCur), unsigned(dataCur-data), mipSize, mipW, mipH);
+				if(numElements > 1) {
+					// for a cubemap or array don't tolerate missing mipmaps or elements
+					// it only leads to trouble later..
+					return false;
+				}
+				// for single textures, if we loaded at least one mipmap
+				// we can display the file despite the error
+				return (i > 0);
 			}
 			mipLevels.push_back( MipLevel(mipW, mipH, dataCur, mipSize) );
 			if(mipW == 1 && mipH == 1 && i < numMips-1) {
