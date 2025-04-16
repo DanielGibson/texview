@@ -39,6 +39,7 @@ static GLuint shaderProgram = 0;
 
 static bool showImGuiDemoWindow = false;
 static bool showAboutWindow = false;
+static bool showGLSLeditWindow = false;
 
 static float imGuiMenuWidth = 0.0f;
 static bool imguiMenuCollapsed = false;
@@ -56,9 +57,12 @@ static int overrideAlpha = -1; // -1: auto, 0: force disable alpha blending, 1: 
 
 static int cubeCrossVariant = 0; // 0-3
 static int textureArrayIndex = 0;
-static std::string swizzle;
+static std::string texSampleAndNormalize; // used in shader and shown in GLSL (swizzle) editor
+static std::string swizzle; // used in shader, modifiable by user
+// something like "b1ga", transformed to swizzle with SetSwizzleFromSimple()
 static char simpleSwizzle[5] = {};
 static bool useSimpleSwizzle = true;
+
 
 static enum ViewMode {
 	SINGLE,
@@ -74,6 +78,25 @@ static int numTiles[2] = {2, 2};
 static void glfw_error_callback(int error, const char* description)
 {
 	errprintf("GLFW Error: %d - %s\n", error, description);
+}
+
+#ifdef __GNUC__
+static void AppendFormatted(std::string& str, const char* fmt, ...)
+__attribute__((format(printf, 2, 3)));
+// NOTE: For some reason, MSVC only supports printf-format checking for
+//       their own functions, not for user-defined ones -_-
+#endif
+
+static void AppendFormatted(std::string& str, const char* fmt, ...)
+{
+	va_list ap;
+	char buf[2048];
+
+	va_start(ap, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, ap);
+	va_end(ap);
+
+	str += buf;
 }
 
 static void ZoomFitToWindow(GLFWwindow* window, float tw, float th, bool isCube)
@@ -121,8 +144,9 @@ void main()
 // ... here UpdateShaders() adds a line like "	vec4 c = texture(tex0, texCoord.st);\n"
 // ... at this point swizzling could happen ("	c = c.agbr;") - generate that dynamically
 
+// Note: only indenting with single space so it looks better in the advanced swizzle editor
 static const char* fragShaderEnd =  R"(
-	OutColor = c;
+ OutColor = c;
 }
 )";
 //"\n}\n";
@@ -238,8 +262,8 @@ CreateShaderProgram(const GLuint shaders[2])
 
 static void SetSwizzleFromSimple()
 {
+	swizzle.clear();
 	if(simpleSwizzle[0] == '\0') {
-		swizzle.clear();
 		return;
 	}
 	const char* args[4] = { "0.0", "0.0", "0.0", "1.0" };
@@ -280,9 +304,7 @@ static void SetSwizzleFromSimple()
 				errprintf("Invalid character '%c' in swizzle!\n", simpleSwizzle[i]);
 		}
 	}
-	char buf[128] = {};
-	snprintf(buf, sizeof(buf), "	c = vec4( %s, %s, %s, %s );\n", args[0], args[1], args[2], args[3]);
-	swizzle = buf;
+	AppendFormatted(swizzle, "c = vec4(%s, %s, %s, %s);\n", args[0], args[1], args[2], args[3]);
 }
 
 static bool UpdateShaders()
@@ -318,20 +340,18 @@ static bool UpdateShaders()
 	char samplerUniform[48] = {};
 	snprintf(samplerUniform, sizeof(samplerUniform), "uniform %s%s%s tex0;\n", typePrefix, samplerBaseType, typePostfix);
 
-	char sampleTexture[48] = {0};
-	char normalization[64] = "\n"; // by default nothing needs to be done
+	texSampleAndNormalize.clear();
 
 	if(isIntTexture) {
-		snprintf(sampleTexture, sizeof(sampleTexture),
-		         "	%svec4 v = texture( tex0, texCoord.%.*s );\n",
-		         typePrefix, numTexCoords, "stpq");
+		AppendFormatted(texSampleAndNormalize,
+		                " %svec4 v = texture( tex0, texCoord.%.*s );\n",
+		                typePrefix, numTexCoords, "stpq");
 		// integer textures (GL_RGB_INTEGER etc) need normalization to display something useful
-		snprintf(normalization, sizeof(normalization), "	vec4 c = vec4(v) / %s;\n", normDiv);
+		AppendFormatted(texSampleAndNormalize, " vec4 c = vec4(v) / %s;\n", normDiv);
 	} else {
 		// normal textures don't need normalization, so assign to vec4 c directly
-		snprintf(sampleTexture, sizeof(sampleTexture),
-		         "	vec4 c = texture( tex0, texCoord.%.*s );\n",
-		         numTexCoords, "stpq");
+		AppendFormatted(texSampleAndNormalize, " vec4 c = texture( tex0, texCoord.%.*s );\n",
+		                numTexCoords, "stpq");
 	}
 
 	if(useSimpleSwizzle) {
@@ -342,8 +362,7 @@ static bool UpdateShaders()
 		glslVersion,
 		samplerUniform,
 		fragShaderStart,
-		sampleTexture,
-		normalization,
+		texSampleAndNormalize.c_str(),
 		swizzle.c_str(),
 		fragShaderEnd
 	};
@@ -478,6 +497,8 @@ static void LoadTexture(const char* path)
 
 	simpleSwizzle[0] = '\0'; // no swizzling by default
 	useSimpleSwizzle = true;
+	swizzle.clear();
+
 
 	UpdateShaders();
 }
@@ -879,6 +900,50 @@ static void DrawAboutWindow(GLFWwindow* window)
 	ImGui::End();
 }
 
+static void DrawGLSLeditWindow(GLFWwindow* window)
+{
+	ImGuiIO& io = ImGui::GetIO();
+
+	ImGui::SetNextWindowPos( ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f),
+	                         ImGuiCond_Once, ImVec2(0.5f, 0.5f) );
+
+	ImGuiWindowFlags flags = 0;
+	if(ImGui::Begin("Advanced Swizzling", &showGLSLeditWindow, flags)) {
+		ImGui::TextDisabled("%s", texSampleAndNormalize.c_str());
+
+		static char buf[4096] = {};
+		if(ImGui::IsWindowAppearing()) {
+			size_t len = std::min(swizzle.size(), sizeof(buf)-1);
+			memcpy(buf, swizzle.c_str(), len);
+			buf[len] = '\0';
+		}
+
+		ImGuiInputTextFlags flags = ImGuiInputTextFlags_AllowTabInput;
+		ImGui::SetNextItemWidth(-8.0f);
+		if(ImGui::InputTextMultiline("##glslcode", buf, sizeof(buf), ImVec2(0, 0), flags)) {
+			swizzle = buf;
+		}
+
+		ImGui::TextDisabled(" OutColor = c;");
+		ImGui::Spacing();
+
+		float buttonWidth = ImGui::CalcTextSize("Close or what").x;
+		if(ImGui::Button("Apply", ImVec2(buttonWidth, 0.0f))
+		   || ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_Enter)) {
+			UpdateShaders();
+		}
+		ImGui::SetItemTooltip("Alternatively you can press Ctrl+Enter to apply");
+
+		ImGui::SameLine();
+		float buttonOffset = (ImGui::GetWindowWidth() - buttonWidth - 8.0f - ImGui::GetStyle().WindowPadding.x);
+		ImGui::SetCursorPosX(buttonOffset);
+		if(ImGui::Button("Close", ImVec2(buttonWidth, 0.0f))) {
+			showGLSLeditWindow = false;
+		}
+	}
+	ImGui::End();
+}
+
 static void DrawSidebar(GLFWwindow* window)
 {
 	ImGuiIO& io = ImGui::GetIO();
@@ -1033,9 +1098,25 @@ static void DrawSidebar(GLFWwindow* window)
 			                      "0 and 1 set the color channel to that value,\n"
 			                      "the others set the color channel to the value of the given channel.\n"
 			                      "Default: \"rgba\"\n");
+		} else {
+			ImGui::Text("Using advanced Swizzling:");
+			ImGui::BeginDisabled();
+			ImGui::Text("%.*s ...", 24, swizzle.c_str());
+			ImGui::EndDisabled();
+			if(ImGui::Button("Edit advanced Swizzling")) {
+				showGLSLeditWindow = true;
+			}
 		}
-		// TODO: else: advanced swizzle (let user input text for swizzle directly => arbitrary GLSL)
-
+		bool useAdvancedSwizzle = !useSimpleSwizzle;
+		if(ImGui::Checkbox("Use advanced Swizzling", &useAdvancedSwizzle)) {
+			useSimpleSwizzle = !useAdvancedSwizzle;
+			if(useAdvancedSwizzle && simpleSwizzle[0] == '\0') {
+				// in case no simple swizzle was set, set the default one now
+				// so the advanced swizzle text isn't empty
+				memcpy(simpleSwizzle, "rgba", 5);
+				SetSwizzleFromSimple();
+			}
+		}
 
 		ImGui::Spacing(); ImGui::Spacing();
 
@@ -1068,6 +1149,9 @@ static void ImGuiFrame(GLFWwindow* window)
 
 	if(showAboutWindow)
 		DrawAboutWindow(window);
+
+	if(showGLSLeditWindow)
+		DrawGLSLeditWindow(window);
 
 	DrawSidebar(window);
 
