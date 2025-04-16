@@ -263,9 +263,6 @@ CreateShaderProgram(const GLuint shaders[2])
 static void SetSwizzleFromSimple()
 {
 	swizzle.clear();
-	if(simpleSwizzle[0] == '\0') {
-		return;
-	}
 	const char* args[4] = { "0.0", "0.0", "0.0", "1.0" };
 	for(int i=0; i<4; ++i) {
 		char c = simpleSwizzle[i];
@@ -500,7 +497,11 @@ static void LoadTexture(const char* path)
 		strncpy(simpleSwizzle, curTex.defaultSwizzle, 4);
 		simpleSwizzle[4] = '\0';
 	} else {
-		simpleSwizzle[0] = '\0'; // no swizzling by default
+		if(curTex.textureFlags & texview::TF_HAS_ALPHA) {
+			strncpy(simpleSwizzle, "rgba", 5);
+		} else {
+			strncpy(simpleSwizzle, "rgb1", 5);
+		}
 	}
 	useSimpleSwizzle = true;
 	swizzle.clear();
@@ -942,7 +943,7 @@ static void DrawGLSLeditWindow(GLFWwindow* window)
 		ImGui::SameLine();
 		float buttonOffset = (ImGui::GetWindowWidth() - buttonWidth - 8.0f - ImGui::GetStyle().WindowPadding.x);
 		ImGui::SetCursorPosX(buttonOffset);
-		if(ImGui::Button("Close", ImVec2(buttonWidth, 0.0f))) {
+		if(ImGui::Button("Close", ImVec2(buttonWidth, 0.0f)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
 			showGLSLeditWindow = false;
 		}
 	}
@@ -1102,7 +1103,7 @@ static void DrawSidebar(GLFWwindow* window)
 			                      "Valid characters: r, g, b, a, x, y, z, w, 0, 1\n"
 			                      "0 and 1 set the color channel to that value,\n"
 			                      "the others set the color channel to the value of the given channel.\n"
-			                      "Default: \"rgba\"\n");
+			                      "Default: \"rgba\" if texture has alpha channel, else \"rgb1\"\n");
 		} else {
 			ImGui::Text("Using advanced Swizzling:");
 			ImGui::BeginDisabled();

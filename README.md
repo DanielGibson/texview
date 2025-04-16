@@ -44,7 +44,7 @@ for example "texview-win64-120eeaa".
     - [ ] including with different mipmap levels next to each other to see how the transitions line up
     - [ ] ideally also a perspective view with a big plane going towards infinity to see the texture's
           mipmapping (with different anisotropic filtering levels) in action
-- [ ] Let user set swizzling of color channels (and maybe swizzle automatically for known swizzled formats like "RXGB" DXT5)
+- [x] Let user set swizzling of color channels (and maybe swizzle automatically for known swizzled formats like "RXGB" DXT5)
     - will have to start using shaders for this.. I hope I can still continue using legacy GL then :-p
 - [ ] Maybe different texture files next to each other (for example to compare quality of encoders)
 - [ ] List of textures in current directory to easily select another one
