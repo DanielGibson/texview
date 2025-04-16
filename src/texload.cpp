@@ -41,6 +41,7 @@ void Texture::Clear()
 		texDataFreeCookie = 0;
 	}
 	glFormat = glType = glTarget = 0;
+	defaultSwizzle = nullptr;
 	texData = nullptr;
 
 	name.clear();
@@ -490,7 +491,7 @@ const ComprFormatInfo comprFormatTable[] = {
 	{ PIXEL_FMT_DXT4,      0, GL_COMPRESSED_RGBA_S3TC_DXT5_EXT, BLOCK16, "DXT4 (BC3 alpha premul)", 0, 0, TF_PREMUL_ALPHA }, // but alpha premultiplied
 	// unofficial DXT5 derivative (R and A chan swapped, or real A even set to 0)
 	// Doom3 checks for it 'RXGB' in fourcc and uses this (only!) for normalmaps
-	{ PIXEL_FMT_DXT5_RXGB, 0, GL_COMPRESSED_RGBA_S3TC_DXT5_EXT, BLOCK16, "DXT5 (BC3) RXGB (xGBR)" },
+	{ PIXEL_FMT_DXT5_RXGB, 0, GL_COMPRESSED_RGBA_S3TC_DXT5_EXT, BLOCK16, "DXT5 (BC3)" },
 
 	// other unofficial derivatives of DXT1-5 - TODO: or are those put in dwRGBBitCount? (see comment in header about compressonator)
 	// FIXME: unsure if 'DX1A' really exists/is used (except in crunch internals) - OTOH, this check doesn't hurt anyone
@@ -1160,6 +1161,28 @@ bool Texture::LoadDDS(MemMappedFile* mmf, const char* filename)
 	}
 	if(numCubeFaces > 1) {
 		numElements *= numCubeFaces;
+	}
+
+	if(fourcc == PIXEL_FMT_DXT5_RXGB
+	   || (fourcc == PIXEL_FMT_DXT5 && header->ddpfPixelFormat.dwRGBBitCount == PIXEL_FMT_DXT5_xGBR)) {
+		// Doom3-style normalmaps that have moved the r (.x) channel into alpha
+		defaultSwizzle = "agb1"; // move alpha chan back to red, set alpha to 1
+		formatName += " xGBR (\"RXGB\")";
+	} else if(fourcc == PIXEL_FMT_DXT5) {
+		// compressonator writes a pseudo-fourcc into the bitcount field
+		// for some DXT5-based formats
+		switch(header->ddpfPixelFormat.dwRGBBitCount)
+		{
+			// case PIXEL_FMT_DXT5_CCxY: TODO: that will require a bit more than swizzling..
+			case PIXEL_FMT_DXT5_xGxR:
+				defaultSwizzle = "ag01"; // move alpha chan back to red, set blue 0 alpha 1
+				formatName += " xGxR";
+				break;
+			case PIXEL_FMT_DXT5_AGBR:
+				defaultSwizzle = "agbr"; // change alpha and red back
+				formatName += " AGBR";
+				break;
+		}
 	}
 
 	textureFlags = ourFlags;

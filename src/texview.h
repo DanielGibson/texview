@@ -141,6 +141,9 @@ public:
 
 	unsigned int glTextureHandle = 0;
 
+	// for formats that should be swizzled, in "simple" format like "agb1"
+	const char* defaultSwizzle = nullptr;
+
 	// texData is freed with texDataFreeFun
 	// it's const because it should generally not be modified (might be read-only mmap)
 	const void* texData = nullptr;
@@ -157,7 +160,7 @@ public:
 		elements(std::move(other.elements)), fileType(other.fileType),
 		textureFlags(other.textureFlags), dataFormat(other.dataFormat),
 		glFormat(other.glFormat), glType(other.glType), glTarget(other.glTarget),
-		glTextureHandle(other.glTextureHandle),
+		glTextureHandle(other.glTextureHandle), defaultSwizzle(other.defaultSwizzle),
 		texData(other.texData), texDataFreeCookie(other.texDataFreeCookie),
 		texDataFreeFun(other.texDataFreeFun), ktxTex(other.ktxTex)
 	{
@@ -186,6 +189,8 @@ public:
 		other.glFormat = other.glType = other.glTarget = 0;
 		glTextureHandle = other.glTextureHandle;
 		other.glTextureHandle = 0;
+		defaultSwizzle = other.defaultSwizzle;
+		other.defaultSwizzle = nullptr;
 		texData = other.texData;
 		other.texData = nullptr;
 		texDataFreeCookie = other.texDataFreeCookie;

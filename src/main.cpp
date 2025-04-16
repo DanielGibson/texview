@@ -495,10 +495,15 @@ static void LoadTexture(const char* path)
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	simpleSwizzle[0] = '\0'; // no swizzling by default
+
+	if(curTex.defaultSwizzle != nullptr) {
+		strncpy(simpleSwizzle, curTex.defaultSwizzle, 4);
+		simpleSwizzle[4] = '\0';
+	} else {
+		simpleSwizzle[0] = '\0'; // no swizzling by default
+	}
 	useSimpleSwizzle = true;
 	swizzle.clear();
-
 
 	UpdateShaders();
 }
