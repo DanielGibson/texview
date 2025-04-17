@@ -24,6 +24,7 @@
 #include <initializer_list>
 
 #include "texview.h"
+#include "version.h"
 
 #include "data/texview_icon.h"
 #include "data/texview_icon32.h"
@@ -884,6 +885,8 @@ static void DrawAboutWindow(GLFWwindow* window)
 	                        | ImGuiWindowFlags_NoCollapse;
 	if(ImGui::Begin("About", &showAboutWindow, flags)) {
 		ImGui::TextDisabled("A texture viewer.");
+		ImGui::TextDisabled("              v"  texview_version);
+
 		ImGui::Spacing();
 		ImGui::Text("Zoom with the mouse wheel,\nmove texture by dragging mouse.");
 		ImGui::Text("Press R to reset view.");
