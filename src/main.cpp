@@ -318,6 +318,8 @@ static bool UpdateShaders()
 	const char* normDiv = curTex.GetIntTexInfo(isUnsigned); // divisor to normalize integer texture
 	bool isIntTexture = normDiv != nullptr;
 
+	std::string glslAdvVersion; // if used, glslVersion will point to it
+
 	const char* samplerBaseType = "sampler2D";
 	int numTexCoords = 2; // default: Texture2D; 2 for .st, 3 for .stp, 4 for stpq (1 for .s once supporting texture1D)
 	const char* typePrefix = ""; // default: standard texture (not _INTEGER)
@@ -328,6 +330,13 @@ static bool UpdateShaders()
 	if(curTex.IsCubemap()) {
 		samplerBaseType = "samplerCube";
 		numTexCoords = 3;
+		if(curTex.IsArray()) {
+			// for cubemap arrays, this #extension thingy must be added after the #version
+			// (unless version >= 400)
+			glslAdvVersion = glslVersion;
+			glslAdvVersion += "#extension GL_ARB_texture_cube_map_array : enable\n";
+			glslVersion = glslAdvVersion.c_str();
+		}
 	}
 	if(curTex.IsArray()) {
 		typePostfix = "Array";
@@ -976,6 +985,17 @@ static void DrawSidebar(GLFWwindow* window)
 		curTex.GetSize(&tw, &th);
 		ImGui::Text("Texture Size: %d x %d", (int)tw, (int)th);
 		ImGui::Text("MipMap Levels: %d", curTex.GetNumMips());
+		bool isCubemap = curTex.IsCubemap();
+		int numCubeFaces = curTex.GetNumCubemapFaces();
+		if(curTex.IsArray()) {
+			ImGui::Text("%sArray Elements: %d", isCubemap ? "Cubemap " : "", curTex.GetNumElements());
+		} else if(isCubemap) {
+			if(numCubeFaces == 6) {
+				ImGui::Text("Cubemap Texture");
+			} else {
+				ImGui::Text("Cubemap Texture with %d faces", curTex.GetNumCubemapFaces());
+			}
+		}
 		const char* alphaStr = "no";
 		bool texHasAlpha = (curTex.textureFlags & texview::TF_HAS_ALPHA) != 0;
 		if(texHasAlpha) {
@@ -983,8 +1003,6 @@ static void DrawSidebar(GLFWwindow* window)
 		}
 		bool texIsSRGB = (curTex.textureFlags & texview::TF_SRGB) != 0;
 		ImGui::Text("Alpha: %s - sRGB: %s", alphaStr, texIsSRGB ? "yes" : "no");
-
-		bool isCubemap = curTex.IsCubemap(); // TODO: show in info?
 
 		ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 		ImGui::PushItemWidth(fontWrapWidth - ImGui::CalcTextSize("View Mode  ").x);

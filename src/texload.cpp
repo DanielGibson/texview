@@ -74,7 +74,6 @@ static const char* getGLerrorString(GLenum e)
 bool Texture::UploadTexture2D(uint32_t target, int internalFormat, int level,
                               bool isCompressed, const Texture::MipLevel& mipLevel)
 {
-	bool anySuccess = false;
 	if(isCompressed) {
 		glCompressedTexImage2D(target, level, internalFormat,
 							   mipLevel.width, mipLevel.height,
@@ -84,8 +83,7 @@ bool Texture::UploadTexture2D(uint32_t target, int internalFormat, int level,
 			errprintf("Sending data from '%s' for mipmap level %d to the GPU with glCompressedTexImage2D() failed. "
 					  "Probably your GPU/driver doesn't support '%s' compression (glGetError() says '%s')\n",
 					  name.c_str(), level, formatName.c_str(), getGLerrorString(e));
-		} else { // probably better than nothing if at least *some* mipmap level has been loaded
-			anySuccess = true;
+			return false;
 		}
 	} else {
 		glTexImage2D(target, level, internalFormat, mipLevel.width,
@@ -95,11 +93,38 @@ bool Texture::UploadTexture2D(uint32_t target, int internalFormat, int level,
 		if(e != GL_NO_ERROR) {
 			errprintf("Sending data from '%s' for mipmap level %d to the GPU with glTexImage2D() failed. "
 					  "glGetError() says '%s'\n", name.c_str(), level, getGLerrorString(e));
-		} else {
-			anySuccess = true;
+			return false;
 		}
 	}
-	return anySuccess;
+	return true;
+}
+
+bool Texture::UploadTexture3Dslice(uint32_t target, int internalFormat, int level, int elemIdx,
+                                   bool isCompressed, const Texture::MipLevel& mipLevel)
+{
+	if(isCompressed) {
+		glCompressedTexSubImage3D(glTarget, level, 0, 0, elemIdx, mipLevel.width,
+		                          mipLevel.height, 1, internalFormat,
+		                          mipLevel.size, mipLevel.data);
+		int e = glGetError();
+		if(e != GL_NO_ERROR) {
+			errprintf("Sending data from '%s', array index %d for mipmap level %d to the GPU with glCompressedTexImage3D() failed. "
+					  "Maybe your GPU/driver doesn't support '%s' compression (glGetError() says '%s')\n",
+					  name.c_str(), elemIdx, level, formatName.c_str(), getGLerrorString(e));
+			return false;
+		}
+	} else {
+		glTexSubImage3D(glTarget, level, 0, 0, elemIdx, mipLevel.width,
+		                mipLevel.height, 1, glFormat, glType, mipLevel.data);
+		int e = glGetError();
+		if(e != GL_NO_ERROR) {
+			errprintf("Sending data from '%s', array index %d for mipmap level %d to the GPU with glTexSubImage3D() failed. "
+					  "Format is '%s', glGetError() says '%s'\n",
+					  name.c_str(), elemIdx, level, formatName.c_str(), getGLerrorString(e));
+			return false;
+		}
+	}
+	return true;
 }
 
 bool Texture::CreateOpenGLtexture()
@@ -126,7 +151,6 @@ bool Texture::CreateOpenGLtexture()
 		GLint intFmt = 0;
 		GLenum baseFmt = 0;
 		ktxTexture_GetOpenGLFormat(ktxTex, &intFmt, &baseFmt, NULL, NULL);
-		printf("created texture  '%s' with internal format 0x%X base format 0x%X\n", name.c_str(), intFmt, baseFmt);
 		return true;
 	}
 
@@ -149,7 +173,7 @@ bool Texture::CreateOpenGLtexture()
 				if(textureFlags & (TF_CUBEMAP_XPOS << cf)) {
 					GLenum target = GL_TEXTURE_CUBE_MAP_POSITIVE_X + cf;
 					std::vector<MipLevel>& mipLevels = elements[elemIdx];
-					for(int i=0; i<numMips; ++i) {
+					for(int i=0; i < numMips; ++i) {
 						if(UploadTexture2D(target, internalFormat, i, isCompressed, mipLevels[i])) {
 							anySuccess = true;
 						}
@@ -159,17 +183,69 @@ bool Texture::CreateOpenGLtexture()
 			}
 		} else { // Texture2D
 			std::vector<MipLevel>& mipLevels = elements[0];
-			for(int i=0; i<numMips; ++i) {
+			for(int i=0; i < numMips; ++i) {
 				if(UploadTexture2D(glTarget, internalFormat, i, isCompressed, mipLevels[i])) {
 					anySuccess = true;
 				}
 			}
 		}
 	} else { // it's an array
-		//glTexImage3D(target, level, internalformat, width, height, depth, border, format, type, pixels)
-		// TODO: do this for arrays, somehow.. https://www.khronos.org/opengl/wiki/Cubemap_Texture#Cubemap_array_textures
-		// maybe something with glTexImage3D(...., NULL) and then glTexSubImage() to set the data?
-		// might make sense to make the mips iteration the outer loop and the elements interation the inner loop?
+		// somewhat helpful: https://ferransole.wordpress.com/2014/06/09/array-textures/
+		const int numElements = GetNumElements();
+		const int numCubeFaces = GetNumCubemapFaces();
+		for(int mipIdx=0; mipIdx < numMips; ++mipIdx) {
+			uint32_t width = elements[0][mipIdx].width;
+			uint32_t height = elements[0][mipIdx].height;
+
+			// first allocate the space for all array elements of this mipmap level
+
+			// cubemap arrays are loaded like normal arrays but with 6 times the elements,
+			// loading always all faces of one cubemap and then the same for the next cubemap
+			// incomplete cubemaps are not allowed in arrays
+			// see also https://www.khronos.org/opengl/wiki/Cubemap_Texture#Cubemap_array_textures
+			// (if this happens, I'll just leave the memory of missing faces uninitialized)
+			uint32_t numLogicalElements = numElements;
+			if(isCubemap) {
+				numLogicalElements *= 6;
+			}
+			// according to https://community.khronos.org/t/glcompressedteximage2d-and-null-data/41505/8
+			// one can't pass data=NULL to glCompressedTexImage*(), but to just reserve space
+			// compressed internal formats can be passed to glTexImage3D (unlike when uploading data)
+			glTexImage3D(glTarget, mipIdx, internalFormat, width, height, numLogicalElements, 0, glFormat, glType, nullptr);
+			GLenum e = glGetError();
+			if(e != GL_NO_ERROR) {
+				errprintf("Allocating GPU memory for mipmap level %d (%u x %u) of texture '%s' with "
+				          "%d array elements for format '%s' on the GPU with glTexImage3D() failed. "
+				          "(glGetError() says '%s')\n",
+				          mipIdx, width, height, name.c_str(), numElements,
+				          formatName.c_str(), getGLerrorString(e));
+				return false;
+			}
+
+			// now upload the data of all array elements
+			for(int elemIdx=0; elemIdx < numElements; ++elemIdx) {
+				if(isCubemap) {
+					int realElemIdx = elemIdx * numCubeFaces; // in elements array
+					// logical index assuming (like OpenGL does) that all 6 cubemap faces are available
+					int logicalElemIdx = elemIdx * 6;
+					for(int cf=0; cf < 6; ++cf) {
+						if(textureFlags & (TF_CUBEMAP_XPOS << cf)) {
+							const MipLevel& mipLevel = elements[realElemIdx][mipIdx];
+							if(UploadTexture3Dslice(glTarget, internalFormat, mipIdx, logicalElemIdx, isCompressed, mipLevel)) {
+								anySuccess = true;
+							}
+							++realElemIdx;
+						}
+						++logicalElemIdx;
+					}
+				} else {
+					const MipLevel& mipLevel = elements[elemIdx][mipIdx];
+					if(UploadTexture3Dslice(glTarget, internalFormat, mipIdx, elemIdx, isCompressed, mipLevel)) {
+						anySuccess = true;
+					}
+				}
+			} // for elemIdx
+		} // for mipIdx
 	}
 
 	return anySuccess;
@@ -1110,6 +1186,12 @@ bool Texture::LoadDDS(MemMappedFile* mmf, const char* filename)
 		if(header->dwFlags & DDSD_PITCH) {
 			// TODO: use header->lPitch ? (how) does it work with mipmaps?
 		}
+	} else {
+		// set glFormat and glType for compressed formats
+		// (only) needed when allocating GPU memory for an array texture
+		// with glTexImage3D(..., NULL)
+		glFormat = dg_glGetBaseInternalFormat(dataFormat);
+		glType = GL_UNSIGNED_BYTE;
 	}
 	if(!foundFormat) {
 		char fccstr[5] = { char(fourcc & 0xff), char((fourcc >> 8) & 0xff),

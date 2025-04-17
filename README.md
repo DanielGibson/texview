@@ -27,7 +27,7 @@ for example "texview-win64-120eeaa".
       [libktx](https://github.com/KhronosGroup/KTX-Software/) and [stb_image.h](https://github.com/nothings/stb/blob/master/stb_image.h).  
       All statically linked (except for OpenGL, of course) and contained in this repo.
 - [x] Load some common image file formats (whatever stb_image.h supports :-p) and DDS textures
-      containing BC1-7 or ASTC data
+      containing BC1-7 or ASTC or uncompressed data
     - [x] Support more (esp. uncompressed) formats in DDS textures
     - [x] Maybe also KTX and KTX2
     - [ ] maybe obscure formats from games like Quake2
@@ -53,7 +53,7 @@ for example "texview-win64-120eeaa".
           But that's more in the "maybe at some point" category
 - [ ] Support more than just 2D textures
     - [x] cubemaps
-    - [ ] texture arrays
+    - [x] texture arrays
     - [ ] 1D textures
     - [ ] 3D textures?
 

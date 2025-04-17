@@ -128,10 +128,10 @@ public:
 	//  see https://docs.gl/gl4/glTexImage2D#idp812160 (table 2)
 	//  or GL_ALPHA or GL_LUMINANCE or GL_LUMINANCE_ALPHA (though those are deprecated)
 	uint32_t dataFormat = 0;
-	// the following two are only used for uncompressed texture formats.
 	// glFormat is one of GL_RED, GL_RG, GL_RGB, GL_BGR, GL_RGBA or GL_BGRA,
 	//  all the former with _INTEGER suffix or GL_STENCIL_INDEX, GL_DEPTH_COMPONENT, GL_DEPTH_STENCIL
-	// or GL_ALPHA or GL_LUMINANCE or GL_LUMINANCE_ALPHA (though those are deprecated)
+	// or GL_ALPHA or GL_LUMINANCE or GL_LUMINANCE_ALPHA (though those are deprecated).
+	// for compressed textures, it's the "base format" (e.g. GL_RGB)
 	uint32_t glFormat = 0;
 	uint32_t glType = 0; // GL_UNSIGNED_BYTE, GL_BYTE, GL_UNSIGNED_SHORT, GL_FLOAT etc
 	// the glTexImage2D() manpage doesn't mention it, but allegedly GL_HALF_FLOAT is also accepted:
@@ -271,6 +271,7 @@ private:
 	bool LoadKTX(MemMappedFile* mmf, const char* filename);
 
 	bool UploadTexture2D(uint32_t target, int internalFormat, int level, bool isCompressed, const Texture::MipLevel& mipLevel);
+	bool UploadTexture3Dslice(uint32_t target, int internalFormat, int level, int elemIdx, bool isCompressed, const Texture::MipLevel& mipLevel);
 };
 
 } //namespace texview
