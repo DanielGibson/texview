@@ -815,6 +815,8 @@ static void GenericFrame(GLFWwindow* window)
 	             clear_color.z * clear_color.w, clear_color.w);
 	glClear(GL_COLOR_BUFFER_BIT);
 
+	glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+
 	float sx, sy;
 	glfwGetWindowContentScale(window, &sx, &sy);
 
