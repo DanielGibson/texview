@@ -2,10 +2,18 @@
 
 ![](texview.png)
 
-Still very much work in progress, but at already feels like an image/texture viewer.
+Still work in progress, but at already has lots of features:
 
 You can drag the texture around the window (with left mouse button), zoom with the mousewheel
-and you can press your `R` key to reset the view.
+and you can press your `R` key to reset the view.  
+Supports DDS, KTX and KTX2 textures *(normal 2D textures, Cubemaps and array textures containing either)*
+in lots of formats *(uncompressed and compressed, as long as your OpenGL driver supports it)* and
+some image file formats (JPG, 8 and 16bit PNG, BMP, TGA, PIC, PNM, HDR; GIF and PSD to some degree).  
+If the texture has mipmaps, those can be viewed in several different ways.
+
+A more unusual feature is that you can **swizzle** the color channels or even edit the pixelshader **GLSL**
+code used to display the texture, which can be useful for normalmaps in optimized encodings, for example,
+or to be able to view images whichs alpha-channel (for whatever reason) is `0` (just set Swizzle to `rgb1`).
 
 Contributions are welcome, but maybe ping me first so we don't accidentally implement the same thing twice :)
 
@@ -13,7 +21,7 @@ Project page: https://github.com/DanielGibson/texview
 
 Download the latest release at https://github.com/DanielGibson/texview/releases/latest
 
-or download Windows and Linux test binaries from automated builds at https://github.com/DanielGibson/texview/actions  
+Or download Windows and Linux *test binaries* from automated builds at https://github.com/DanielGibson/texview/actions  
 Downloading automated test builds REQUIRES YOU TO BE LOGGED INTO GITHUB!  
 Click on an appropriate "workflow run" and then, under "Artifacts", you can download the build in a ZIP,
 for example "texview-win64-120eeaa".
@@ -22,6 +30,7 @@ for example "texview-win64-120eeaa".
 
 - [x] Support at least Windows and Linux (and probably similar Unix-likes)
     - [ ] maybe Mac if someone with a Mac takes care of that.
+      - for this I'd have to use an OpenGL core context, which may generally be a good idea
 - [x] Self-contained executable using OpenGL, [Dear ImGui](https://github.com/ocornut/imgui),
       [GLFW3](https://www.glfw.org/), [Native File Dialog Extended](https://github.com/btzy/nativefiledialog-extended/),
       [libktx](https://github.com/KhronosGroup/KTX-Software/) and [stb_image.h](https://github.com/nothings/stb/blob/master/stb_image.h).  
@@ -40,12 +49,13 @@ for example "texview-win64-120eeaa".
 - [x] Support showing all mipmap levels at once
     - [x] in a spiral-ish compact form, in a column, in a row
     - [x] at their relative sizes OR all in the same size (there the spiral probably should be a grid)
+- [ ] Similar options for texture arrays (show all array elements in column/row/grid)
 - [x] Support tiled view
     - [ ] including with different mipmap levels next to each other to see how the transitions line up
     - [ ] ideally also a perspective view with a big plane going towards infinity to see the texture's
           mipmapping (with different anisotropic filtering levels) in action
 - [x] Let user set swizzling of color channels (and maybe swizzle automatically for known swizzled formats like "RXGB" DXT5)
-    - will have to start using shaders for this.. I hope I can still continue using legacy GL then :-p
+    - need to use shaders for this.. but that's also needed for texture arrays
 - [ ] Maybe different texture files next to each other (for example to compare quality of encoders)
 - [ ] List of textures in current directory to easily select another one
     - [ ] If one can also navigate to `..` and subdirectories here, it could even be a full alternative to the filepicker
@@ -56,6 +66,11 @@ for example "texview-win64-120eeaa".
     - [x] texture arrays
     - [ ] 1D textures
     - [ ] 3D textures?
+- [ ] Support [decoding compressed formats in software](https://github.com/DanielGibson/texview/issues/1)
+      so such textures can be displayed even if the GPU/driver doesn't support them (e.g. ASTC
+      currently isn't shown on NVIDIA GPUs because they only support it for OpenGL ES but this tool
+      uses Desktop OpenGL).
+      Also relevant for macOS, because their OpenGL doesn't even support BC6/7...
 
 **Maybe at some point:**
 
@@ -63,9 +78,7 @@ for example "texview-win64-120eeaa".
   and moveable light and camera
     - Allow customizing shader code for that (feasible with OpenGL as it takes GLSL directly)
 * Diffing images (e.g. to show differences between source image and compressed texture)
-* Support decoding compressed formats in software so such textures can be displayed even if the GPU/driver
-  doesn't support them (e.g. ASTC currently isn't shown on NVIDIA GPUs because they only support it
-  for OpenGL ES but this tool uses Desktop OpenGL)
+
 
 ## Building:
 
