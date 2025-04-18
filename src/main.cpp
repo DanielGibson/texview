@@ -904,6 +904,8 @@ static void GenericFrame(GLFWwindow* window)
 {
 	int display_w, display_h;
 	glfwGetFramebufferSize(window, &display_w, &display_h);
+	printf("fb size x, y: %d, %d\n", display_w, display_h);
+
 	glViewport(0, 0, display_w, display_h);
 	glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w,
 	             clear_color.z * clear_color.w, clear_color.w);
@@ -1489,16 +1491,18 @@ int main(int argc, char** argv)
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
 	#ifdef __APPLE__
 	  // https://www.khronos.org/opengl/wiki/OpenGL_Context#Forward_compatibility
 	  // says forward compat should only be enabled on macOS
 	  glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+	  glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
 	#endif
 	if(wantDebugContext) {
 		glfwWindowHint(GLFW_CONTEXT_DEBUG, GLFW_TRUE);
 	}
 	glfwWindowHint(GLFW_SRGB_CAPABLE, 1); // FIXME: this doesn't seem to make a difference visually or in behavior?!
-	glfwWindow = glfwCreateWindow(1280, 720, "Texture Viewer", nullptr, nullptr);
+	glfwWindow = glfwCreateWindow(800, 600, "Texture Viewer", nullptr, nullptr);
 	if (glfwWindow == nullptr) {
 		errprintf("Couldn't create glfw glfwWindow! Exiting..\n");
 		glfwTerminate();
@@ -1572,9 +1576,17 @@ int main(int argc, char** argv)
 	{
 		float xscale = 1.0f;
 		float yscale = 1.0f;
+		int fb_x, fb_y;
+		int win_x, win_y;
 		glfwGetWindowContentScale(glfwWindow, &xscale, &yscale);
-		myGLFWwindowcontentscalefun(glfwWindow, xscale, yscale);
+		glfwGetFramebufferSize(glfwWindow, &fb_x, &fb_y);
+		glfwGetWindowSize(glfwWindow, &win_x, &win_y);
+		printf("window scale x, y: %f, %f\n", xscale, yscale);
+		printf("frambuffer size x, y: %d, %d\n", fb_x, fb_y);
+		printf("window size x, y: %d, %d\n", win_x, win_y);
+		//myGLFWwindowcontentscalefun(glfwWindow, xscale, yscale);
 		glfwSetWindowContentScaleCallback(glfwWindow, myGLFWwindowcontentscalefun);
+		ImGui::GetStyle().ScaleAllSizes(xscale);
 	}
 
 	while (!glfwWindowShouldClose(glfwWindow)) {
