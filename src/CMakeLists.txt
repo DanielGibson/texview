@@ -15,6 +15,11 @@ set (CMAKE_CXX_STANDARD 14)
 
 set (TEXVIEW_BINARY "texview")
 
+# I was told this makes it build on macOS
+if (APPLE)
+	enable_language(OBJC)
+endif()
+
 ########
 ## GLFW
 
