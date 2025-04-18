@@ -68,7 +68,8 @@ set(KTX_MAIN_SRC
     external/basisu/transcoder/basisu_transcoder.cpp
     external/basisu/transcoder/basisu_transcoder.h
     external/basisu/transcoder/basisu.h
-    external/basisu/zstd/zstd.c
+    #external/basisu/zstd/zstd.c
+    external/basisu/zstd/zstddeclib.c
     lib/checkheader.c
     external/dfdutils/createdfd.c
     external/dfdutils/colourspaces.c
