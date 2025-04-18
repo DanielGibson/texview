@@ -47,6 +47,7 @@ static texview::Texture curTex;
 static GLuint shaderProgram = 0;
 static GLuint quadsVBO = 0;
 static GLuint quadsVAO = 0;
+static GLint mvpMatrixUniform = 0;
 
 static bool showImGuiDemoWindow = false;
 static bool showAboutWindow = false;
@@ -142,6 +143,7 @@ enum {
 static const char* vertexShaderSrc = R"(
 in vec4 position; // TV_ATTRIB_POSITION
 in vec4 inTexCoord; // TV_ATTRIB_TEXCOORD
+uniform mat4 mvpMatrix;
 
 out vec4 texCoord;
 out float mipLevel;
@@ -149,7 +151,7 @@ void main()
 {
 	// position.w contains the desired miplevel (LOD)
 	// so replace that with 1 for the actual position
-	gl_Position = gl_ModelViewProjectionMatrix * vec4(position.xyz, 1.0);
+	gl_Position = mvpMatrix * vec4(position.xyz, 1.0);
 	texCoord = inTexCoord;
 	mipLevel = position.w;
 }
@@ -331,7 +333,7 @@ static void SetSwizzleFromSimple()
 
 static bool UpdateShaders()
 {
-	const char* glslVersion = "#version 150 compatibility\n";
+	const char* glslVersion = "#version 150\n";
 
 	GLuint shaders[2] = {};
 	shaders[0] = CompileShader(GL_VERTEX_SHADER, { glslVersion, vertexShaderSrc });
@@ -440,10 +442,25 @@ static bool UpdateShaders()
 		glDeleteProgram(shaderProgram);
 	}
 
-	shaderProgram = prog;
+	glUseProgram(prog);
 
-	glUseProgram(shaderProgram);
-	// TODO: could set uniforms here
+	mvpMatrixUniform = glGetUniformLocation(prog, "mvpMatrix");
+	if(mvpMatrixUniform == -1) {
+		errprintf("Can't find mvpMatrix uniform in the shader?!\n");
+		glUseProgram(0);
+		glDeleteProgram(prog);
+		return false;
+	}
+
+	float idmat[16] = {
+		1, 0, 0, 0,
+		0, 1, 0, 0,
+		0, 0, 1, 0,
+		0, 0, 0, 1
+	};
+	glUniformMatrix4fv(mvpMatrixUniform, 1, GL_FALSE, idmat);
+
+	shaderProgram = prog;
 
 	return true;
 }
@@ -746,7 +763,6 @@ static void DrawTexture()
 	else
 		glDisable( GL_FRAMEBUFFER_SRGB );
 
-	glUseProgram(shaderProgram);
 	glBindTexture(tex.glTarget, gltex);
 
 	float texW, texH;
@@ -901,6 +917,9 @@ static void GenericFrame(GLFWwindow* window)
 	float xOffs = imguiMenuCollapsed ? 0.0f : imGuiMenuWidth * sx;
 	float winW = display_w - xOffs;
 
+	glUseProgram(shaderProgram);
+
+#if 0
 	// good thing we're using a compat profile :-p
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
@@ -911,6 +930,35 @@ static void GenericFrame(GLFWwindow* window)
 
 	glScaled(zoomLevel, zoomLevel, 1);
 	glTranslated((transX * sx) / zoomLevel, (transY * sy) / zoomLevel, 0.0);
+#else
+	float mvp[4][4] = {};
+	glViewport(xOffs, 0, winW, display_h);
+
+	// ortho like glOrtho(0, winW, display_h, 0, -1, 1);
+	{
+		float left = 0, right = winW, bottom = display_h, top = 0, near = -1, far = 1;
+		mvp[0][0] = 2.0f / (right - left);
+		mvp[1][1] = 2.0f / (top - bottom);
+		mvp[2][2] = 2.0f / (near - far);
+		mvp[3][3] = 1.0f;
+
+		mvp[3][0] = (left + right) / (left - right);
+		mvp[3][1] = (bottom + top) / (bottom - top);
+		mvp[3][2] = (near + far) / (near - far);
+	}
+	// scale with (zoomLevel, zoomLevel, 1.0)
+	mvp[0][0] *= zoomLevel;
+	mvp[1][1] *= zoomLevel;
+	// translate by ((transX * sx) / zoomLevel, (transY * sy) / zoomLevel, 0.0)
+	{
+		float tx = (transX * sx) / zoomLevel;
+		float ty = (transY * sy) / zoomLevel;
+		mvp[3][0] += mvp[0][0] * tx;
+		mvp[3][1] += mvp[1][1] * ty;
+	}
+
+	glUniformMatrix4fv(mvpMatrixUniform, 1, GL_FALSE, mvp[0]);
+#endif
 
 	DrawTexture();
 }
@@ -1439,12 +1487,17 @@ int main(int argc, char** argv)
 	// Create window with graphics context
 	const char* glsl_version = "#version 130"; // for ImGui
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	#ifdef __APPLE__
+	  // https://www.khronos.org/opengl/wiki/OpenGL_Context#Forward_compatibility
+	  // says forward compat should only be enabled on macOS
+	  glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+	#endif
 	if(wantDebugContext) {
 		glfwWindowHint(GLFW_CONTEXT_DEBUG, GLFW_TRUE);
 	}
 	glfwWindowHint(GLFW_SRGB_CAPABLE, 1); // FIXME: this doesn't seem to make a difference visually or in behavior?!
-	//glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	glfwWindow = glfwCreateWindow(1280, 720, "Texture Viewer", nullptr, nullptr);
 	if (glfwWindow == nullptr) {
 		errprintf("Couldn't create glfw glfwWindow! Exiting..\n");
