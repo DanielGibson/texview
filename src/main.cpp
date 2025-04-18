@@ -54,11 +54,12 @@ static bool showImGuiDemoWindow = false;
 static bool showAboutWindow = false;
 static bool showGLSLeditWindow = false;
 
-static float imGuiMenuWidth = 0.0f;
+static float imguiMenuWidth = 0.0f;
 static bool imguiMenuCollapsed = false;
 
 static bool updateFont;
 static float imguiScale = 1.0f;
+static ImVec2 imguiCoordScale(1.0f, 1.0f);
 
 static double zoomLevel = 1.0;
 static double transX = 10;
@@ -124,7 +125,7 @@ static void ZoomFitToWindow(GLFWwindow* window, float tw, float th, bool isCube)
 	}
 	int display_w, display_h;
 	glfwGetFramebufferSize(window, &display_w, &display_h);
-	double winW = display_w - imGuiMenuWidth;
+	double winW = display_w - imguiMenuWidth;
 	double zw = winW / tw;
 	double zh = display_h / th;
 	if(zw < zh) {
@@ -915,10 +916,10 @@ static void GenericFrame(GLFWwindow* window)
 
 	glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
 
-	float sx, sy;
-	glfwGetWindowContentScale(window, &sx, &sy);
+	//float sx, sy;
+	//glfwGetWindowContentScale(window, &sx, &sy);
 
-	float xOffs = imguiMenuCollapsed ? 0.0f : imGuiMenuWidth * sx;
+	float xOffs = imguiMenuCollapsed ? 0.0f : imguiMenuWidth * imguiCoordScale.x;
 	float winW = display_w - xOffs;
 
 	glUseProgram(shaderProgram);
@@ -955,8 +956,8 @@ static void GenericFrame(GLFWwindow* window)
 	mvp[1][1] *= zoomLevel;
 	// translate by ((transX * sx) / zoomLevel, (transY * sy) / zoomLevel, 0.0)
 	{
-		float tx = (transX * sx) / zoomLevel;
-		float ty = (transY * sy) / zoomLevel;
+		float tx = (transX * imguiCoordScale.x) / zoomLevel;
+		float ty = (transY * imguiCoordScale.y) / zoomLevel;
 		mvp[3][0] += mvp[0][0] * tx;
 		mvp[3][1] += mvp[1][1] * ty;
 	}
@@ -1297,8 +1298,24 @@ static void DrawSidebar(GLFWwindow* window)
 		if(ImGui::Button("Apply")) {
 			updateFont = true;
 		}
+
+		// FIXME: debug shit, remove (or at least disable by default)
+		{
+			int winW, winH;
+			int fbW, fbH;
+			float scaleX, scaleY;
+			glfwGetWindowSize(window, &winW, &winH);
+			glfwGetFramebufferSize(window, &fbW, &fbH);
+			glfwGetWindowContentScale(window, &scaleX, &scaleY);
+
+			ImGui::Text("GLFW log WinSize: %d x %d", winW, winH);
+			ImGui::Text("GLFW FB size:     %d x %d", fbW, fbH);
+			ImGui::Text("     => ratio: %g ; %g", float(fbW)/winW, float(fbH)/winH);
+			ImGui::Text("GLFW WinScale: %g ; %g", scaleX, scaleY);
+		}
+
 		ImGui::Checkbox("Show ImGui Demo Window", &showImGuiDemoWindow);
-		imGuiMenuWidth = ImGui::GetWindowWidth();
+		imguiMenuWidth = ImGui::GetWindowWidth();
 	}
 	imguiMenuCollapsed = ImGui::IsWindowCollapsed();
 	ImGui::End();
@@ -1433,6 +1450,13 @@ void myGLFWwindowcontentscalefun(GLFWwindow* window, float xscale, float yscale)
 	//ImGui::GetIO().FontGlobalScale = std::max(xscale, yscale);
 	imguiScale = std::max(xscale, yscale);
 	updateFont = true;
+}
+
+void myGLFWwindowsizefun(GLFWwindow* window, int width, int height)
+{
+	int fbW, fbH;
+	glfwGetFramebufferSize(window, &fbW, &fbH);
+	imguiCoordScale = ImVec2( float(fbW)/width, float(fbH)/height );
 }
 
 /*
@@ -1608,6 +1632,10 @@ int main(int argc, char** argv)
 		glfwGetWindowContentScale(glfwWindow, &xscale, &yscale);
 		myGLFWwindowcontentscalefun(glfwWindow, xscale, yscale);
 		glfwSetWindowContentScaleCallback(glfwWindow, myGLFWwindowcontentscalefun);
+		int winW, winH;
+		glfwGetWindowSize(glfwWindow, &winW, &winH);
+		myGLFWwindowsizefun(glfwWindow, winW, winH);
+		glfwSetWindowSizeCallback(glfwWindow, myGLFWwindowsizefun);
 	}
 
 	while (!glfwWindowShouldClose(glfwWindow)) {
