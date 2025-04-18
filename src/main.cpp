@@ -29,6 +29,14 @@
 #include "data/texview_icon.h"
 #include "data/texview_icon32.h"
 
+// a wrapper around glVertexAttribPointer() to stay sane
+// (caller doesn't have to cast to GLintptr and then void*)
+static inline void
+qglVertexAttribPointer(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, GLintptr offset)
+{
+	glVertexAttribPointer(index, size, type, normalized, stride, (const void*)offset);
+}
+
 static GLFWwindow* glfwWindow;
 
 static ImVec4 clear_color(0.45f, 0.55f, 0.60f, 1.00f);
@@ -37,6 +45,8 @@ static ImVec4 clear_color(0.45f, 0.55f, 0.60f, 1.00f);
 static texview::Texture curTex;
 
 static GLuint shaderProgram = 0;
+static GLuint quadsVBO = 0;
+static GLuint quadsVAO = 0;
 
 static bool showImGuiDemoWindow = false;
 static bool showAboutWindow = false;
@@ -123,13 +133,25 @@ static void ZoomFitToWindow(GLFWwindow* window, float tw, float th, bool isCube)
 	}
 }
 
+// GL vertex attribute location indices
+enum {
+	TV_ATTRIB_POSITION   = 0,
+	TV_ATTRIB_TEXCOORD   = 1,
+};
+
 static const char* vertexShaderSrc = R"(
+in vec4 position; // TV_ATTRIB_POSITION
+in vec4 inTexCoord; // TV_ATTRIB_TEXCOORD
+
 out vec4 texCoord;
-// TODO: a way to pass cube face num or array slice num? or is texCoord.z(?) stable enough?
+out float mipLevel;
 void main()
 {
-	gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
-	texCoord = gl_MultiTexCoord0;
+	// position.w contains the desired miplevel (LOD)
+	// so replace that with 1 for the actual position
+	gl_Position = gl_ModelViewProjectionMatrix * vec4(position.xyz, 1.0);
+	texCoord = inTexCoord;
+	mipLevel = position.w;
 }
 )";
 
@@ -137,6 +159,7 @@ void main()
 //       setting that in UpdateShaders() based on type
 static const char* fragShaderStart = R"(
 in vec4 texCoord;
+in float mipLevel;
 out vec4 OutColor;
 void main()
 {
@@ -221,7 +244,8 @@ CreateShaderProgram(const GLuint shaders[2])
 	glAttachShader(prog, shaders[0]);
 	glAttachShader(prog, shaders[1]);
 
-	// TODO: glBindAttribLocation() goes here, if needed
+	glBindAttribLocation(prog, TV_ATTRIB_POSITION, "position");
+	glBindAttribLocation(prog, TV_ATTRIB_TEXCOORD, "inTexCoord");
 
 	glLinkProgram(prog);
 
@@ -350,14 +374,38 @@ static bool UpdateShaders()
 	texSampleAndNormalize.clear();
 
 	if(isIntTexture) {
-		AppendFormatted(texSampleAndNormalize,
-		                " %svec4 v = texture( tex0, texCoord.%.*s );\n",
-		                typePrefix, numTexCoords, "stpq");
+		AppendFormatted(texSampleAndNormalize, " %svec4 v;\n", typePrefix);
+		/* ivec4 v; // or uvec4
+		 * if(mipLevel < 0.0)
+		 *     v = texture( tex0, texCoord.st ); // or maybe .stp or .stpq
+		 * else
+		 *     v = textureLod( tex0, texCoord.st, mipLevel );
+		 *
+		 * vec4 c = vec4(4) / 127.0; // or other divisor depending on integer type
+		 */
+
+		AppendFormatted(texSampleAndNormalize, " if(mipLevel < 0.0)\n"
+		                "	v = texture(tex0, texCoord.%.*s);\n",
+		                numTexCoords, "stpq");
+		AppendFormatted(texSampleAndNormalize, " else\n"
+		                "	v = textureLod(tex0, texCoord.%.*s, mipLevel);\n",
+		                numTexCoords, "stpq");
 		// integer textures (GL_RGB_INTEGER etc) need normalization to display something useful
-		AppendFormatted(texSampleAndNormalize, " vec4 c = vec4(v) / %s;\n", normDiv);
+		AppendFormatted(texSampleAndNormalize, "\n vec4 c = vec4(v) / %s;\n", normDiv);
 	} else {
+		/* vec4 c;
+		 * if(mipLevel < 0.0)
+		 *     c = texture( tex0, texCoord.stp ); // or .st or .stpq
+		 * else
+		 *     c = textureLod( tex0, texCoord.stp, mipLevel );
+		 */
 		// normal textures don't need normalization, so assign to vec4 c directly
-		AppendFormatted(texSampleAndNormalize, " vec4 c = texture( tex0, texCoord.%.*s );\n",
+		AppendFormatted(texSampleAndNormalize, " vec4 c;\n");
+		AppendFormatted(texSampleAndNormalize, " if(mipLevel < 0.0)\n"
+		                "	c = texture(tex0, texCoord.%.*s);\n",
+		                numTexCoords, "stpq");
+		AppendFormatted(texSampleAndNormalize, " else\n"
+		                "	c = textureLod(tex0, texCoord.%.*s, mipLevel);\n",
 		                numTexCoords, "stpq");
 	}
 
@@ -398,31 +446,6 @@ static bool UpdateShaders()
 	// TODO: could set uniforms here
 
 	return true;
-}
-
-// mipLevel -1 = auto (let GPU choose from all levels)
-// otherwise use the given level (if it exists..)
-static void SetMipmapLevel(texview::Texture& texture, GLint mipLevel, bool bindTexture = true)
-{
-	GLuint tex = texture.glTextureHandle;
-	GLint numMips = texture.GetNumMips();
-	if(tex == 0 || numMips == 1) {
-		return;
-	}
-	if(bindTexture) {
-		glBindTexture(texture.glTarget, tex);
-	}
-
-	mipLevel = std::min(mipLevel, numMips - 1);
-	// setting both to the same level enforces using that level
-	GLint baseLevel = mipLevel;
-	GLint maxLevel  = mipLevel;
-	if(mipLevel < 0) { // auto mode
-		baseLevel = 0;
-		maxLevel = numMips - 1;
-	}
-	glTexParameteri(texture.glTarget, GL_TEXTURE_BASE_LEVEL, baseLevel);
-	glTexParameteri(texture.glTarget, GL_TEXTURE_MAX_LEVEL, maxLevel);
 }
 
 static void UpdateTextureFilter(bool bindTex = true)
@@ -485,7 +508,9 @@ static void LoadTexture(const char* path)
 			// if it's set to auto, keep it at auto, otherwise default to 0
 			mipmapLevel = 0;
 		}
-		SetMipmapLevel(curTex, mipmapLevel, false);
+		int maxLevel = curTex.GetNumMips() - 1;
+		glTexParameteri(curTex.glTarget, GL_TEXTURE_BASE_LEVEL, 0);
+		glTexParameteri(curTex.glTarget, GL_TEXTURE_MAX_LEVEL, maxLevel);
 	}
 
 	if(curTex.IsCubemap()) {
@@ -519,35 +544,6 @@ static void LoadTexture(const char* path)
 	UpdateShaders();
 }
 
-// mipLevel -1 == use configured mipmapLevel
-static void DrawQuad(texview::Texture& texture, int mipLevel, int arrayIndex, ImVec2 pos, ImVec2 size, ImVec2 texCoordMax = ImVec2(1, 1))
-{
-	ImVec2 texCoordMin = ImVec2(0, 0);
-	GLuint tex = texture.glTextureHandle;
-	if(tex) {
-
-		glBindTexture(texture.glTarget, tex);
-
-		SetMipmapLevel(texture, (mipLevel < 0) ? mipmapLevel : mipLevel, false);
-
-		float idx = arrayIndex;
-
-		glBegin(GL_QUADS);
-			glTexCoord3f(texCoordMin.x, texCoordMin.y, idx);
-			glVertex2f(pos.x, pos.y);
-
-			glTexCoord3f(texCoordMin.x, texCoordMax.y, idx);
-			glVertex2f(pos.x, pos.y + size.y);
-
-			glTexCoord3f(texCoordMax.x, texCoordMax.y, idx);
-			glVertex2f(pos.x + size.x, pos.y + size.y);
-
-			glTexCoord3f(texCoordMax.x, texCoordMin.y, idx);
-			glVertex2f(pos.x + size.x, pos.y);
-		glEnd();
-	}
-}
-
 struct vec4 {
 	union {
 		struct { float x, y, z, w; };
@@ -557,6 +553,54 @@ struct vec4 {
 	vec4(float x_, float y_, float z_ = 0.0f, float w_ = 0.0f)
 	: x(x_), y(y_), z(z_), w(w_) {}
 };
+
+struct VertexData {
+	vec4 pos; // Note: pos.w holds desired mipLevel (LOD) or -1 for "automatically choose"
+	vec4 tc;
+};
+
+static std::vector<VertexData> drawData;
+
+// mipLevel -1 == use configured mipmapLevel
+static void AddQuad(texview::Texture& texture, int mipLevel, int arrayIndex, ImVec2 pos, ImVec2 size, ImVec2 texCoordMax = ImVec2(1, 1))
+{
+	ImVec2 texCoordMin = ImVec2(0, 0);
+
+	if(mipLevel < 0) {
+		mipLevel = mipmapLevel;
+	}
+
+	float lod = std::min(mipLevel, texture.GetNumMips() - 1);
+	float idx = arrayIndex;
+
+	// vertices of the quad
+	VertexData v1 = {
+		{ pos.x, pos.y, 0.0f, lod },
+		{ texCoordMin.x, texCoordMin.y, idx }
+	};
+	VertexData v2 = {
+		{ pos.x, pos.y + size.y, 0.0f, lod },
+		{ texCoordMin.x, texCoordMax.y, idx }
+	};
+	VertexData v3 = {
+		{ pos.x + size.x, pos.y + size.y, 0.0f, lod },
+		{ texCoordMax.x, texCoordMax.y, idx }
+	};
+	VertexData v4 = {
+		{ pos.x + size.x, pos.y, 0.0f, lod },
+		{ texCoordMax.x, texCoordMin.y, idx }
+	};
+
+	// now add the vertices for two triangles that draw the quad
+	drawData.push_back(v1);
+	drawData.push_back(v2);
+	drawData.push_back(v3);
+
+	drawData.push_back(v1);
+	drawData.push_back(v3);
+	drawData.push_back(v4);
+}
+
 enum CubeFaceIndex {
 	FI_XPOS = 0,
 	FI_XNEG = 1,
@@ -567,87 +611,115 @@ enum CubeFaceIndex {
 };
 
 // mipLevel -1 == use configured mipmapLevel
-static void DrawCubeQuad(texview::Texture& texture, int mipLevel, int faceIndex, int arrayIndex, ImVec2 pos, ImVec2 size, ImVec2 texCoordMax = ImVec2(1, 1))
+static void AddCubeQuad(texview::Texture& texture, int mipLevel, int faceIndex, int arrayIndex, ImVec2 pos, ImVec2 size, ImVec2 texCoordMax = ImVec2(1, 1))
 {
 	ImVec2 texCoordMin = ImVec2(0, 0);
 
-	GLuint tex = texture.glTextureHandle;
-	if(tex) {
+	// helpful: https://stackoverflow.com/questions/38543155/opengl-render-face-of-cube-map-to-a-quad
 
-		glBindTexture(texture.glTarget, tex);
+	// scale from [0, 1] to [-1, 1]
+	texCoordMin.x = texCoordMin.x * 2.0f - 1.0f;
+	texCoordMin.y = texCoordMin.y * 2.0f - 1.0f;
+	texCoordMax.x = texCoordMax.x * 2.0f - 1.0f;
+	texCoordMax.y = texCoordMax.y * 2.0f - 1.0f;
 
-		SetMipmapLevel(texture, (mipLevel < 0) ? mipmapLevel : mipLevel, false);
+	vec4 mapCoords[4] = {
+		// initialize with x, y coordinates (or s,t or whatever)
+		{ texCoordMin.x, texCoordMin.y },
+		{ texCoordMin.x, texCoordMax.y },
+		{ texCoordMax.x, texCoordMax.y },
+		{ texCoordMax.x, texCoordMin.y }
+	};
 
-		// helpful: https://stackoverflow.com/questions/38543155/opengl-render-face-of-cube-map-to-a-quad
-
-		// scale from [0, 1] to [-1, 1]
-		texCoordMin.x = texCoordMin.x * 2.0f - 1.0f;
-		texCoordMin.y = texCoordMin.y * 2.0f - 1.0f;
-		texCoordMax.x = texCoordMax.x * 2.0f - 1.0f;
-		texCoordMax.y = texCoordMax.y * 2.0f - 1.0f;
-
-		vec4 mapCoords[4] = {
-			// initialize with x, y coordinates (or s,t or whatever)
-			{ texCoordMin.x, texCoordMin.y },
-			{ texCoordMin.x, texCoordMax.y },
-			{ texCoordMax.x, texCoordMax.y },
-			{ texCoordMax.x, texCoordMin.y }
-		};
-
-		for(vec4& mc : mapCoords) {
-			vec4 tmp;
-			switch(faceIndex) {
-				case FI_XPOS:
-					tmp = vec4( 1.0f, -mc.y, -mc.x );
-					break;
-				case FI_XNEG:
-					tmp = vec4( -1.0f, -mc.y, mc.x );
-					break;
-				case FI_YPOS:
-					tmp = vec4( mc.x, 1.0f, mc.y );
-					break;
-				case FI_YNEG:
-					tmp = vec4( mc.x, -1.0f, -mc.y );
-					break;
-				case FI_ZPOS:
-					tmp = vec4( mc.x, -mc.y, 1.0f );
-					break;
-				case FI_ZNEG:
-					tmp = vec4( -mc.x, -mc.y, -1.0f );
-					break;
-			}
-			mc = tmp;
-			mc.w = arrayIndex;
+	for(vec4& mc : mapCoords) {
+		vec4 tmp;
+		switch(faceIndex) {
+			case FI_XPOS:
+				tmp = vec4( 1.0f, -mc.y, -mc.x );
+				break;
+			case FI_XNEG:
+				tmp = vec4( -1.0f, -mc.y, mc.x );
+				break;
+			case FI_YPOS:
+				tmp = vec4( mc.x, 1.0f, mc.y );
+				break;
+			case FI_YNEG:
+				tmp = vec4( mc.x, -1.0f, -mc.y );
+				break;
+			case FI_ZPOS:
+				tmp = vec4( mc.x, -mc.y, 1.0f );
+				break;
+			case FI_ZNEG:
+				tmp = vec4( -mc.x, -mc.y, -1.0f );
+				break;
 		}
-
-		if(cubeCrossVariant > 0 && (faceIndex == FI_YPOS || faceIndex == FI_YNEG)) {
-			int rotationSteps = (faceIndex == FI_YPOS) ? cubeCrossVariant : (4 - cubeCrossVariant);
-			vec4 mapCoordsCopy[4];
-			for(int i=0; i<4; ++i) {
-				mapCoordsCopy[i] = mapCoords[ (i+rotationSteps) % 4 ];
-			}
-			memcpy(mapCoords, mapCoordsCopy, sizeof(mapCoords));
-		}
-
-		glBegin(GL_QUADS);
-			glTexCoord4fv(mapCoords[0].vals);
-			glVertex2f(pos.x, pos.y);
-
-			glTexCoord4fv(mapCoords[1].vals);
-			glVertex2f(pos.x, pos.y + size.y);
-
-			glTexCoord4fv(mapCoords[2].vals);
-			glVertex2f(pos.x + size.x, pos.y + size.y);
-
-			glTexCoord4fv(mapCoords[3].vals);
-			glVertex2f(pos.x + size.x, pos.y);
-		glEnd();
+		mc = tmp;
+		mc.w = arrayIndex;
 	}
+
+	if(cubeCrossVariant > 0 && (faceIndex == FI_YPOS || faceIndex == FI_YNEG)) {
+		int rotationSteps = (faceIndex == FI_YPOS) ? cubeCrossVariant : (4 - cubeCrossVariant);
+		vec4 mapCoordsCopy[4];
+		for(int i=0; i<4; ++i) {
+			mapCoordsCopy[i] = mapCoords[ (i+rotationSteps) % 4 ];
+		}
+		memcpy(mapCoords, mapCoordsCopy, sizeof(mapCoords));
+	}
+
+	if(mipLevel < 0) {
+		mipLevel = mipmapLevel;
+	}
+
+	float lod = std::min(mipLevel, texture.GetNumMips() - 1);
+
+	// vertices of the quad
+	VertexData v1 = {
+		{ pos.x, pos.y, 0.0f, lod },
+		mapCoords[0]
+	};
+	VertexData v2 = {
+		{ pos.x, pos.y + size.y, 0.0f, lod },
+		mapCoords[1]
+	};
+	VertexData v3 = {
+		{ pos.x + size.x, pos.y + size.y, 0.0f, lod },
+		mapCoords[2]
+	};
+	VertexData v4 = {
+		{ pos.x + size.x, pos.y, 0.0f, lod },
+		mapCoords[3]
+	};
+
+	// now add the vertices for two triangles that draw the quad
+	drawData.push_back(v1);
+	drawData.push_back(v2);
+	drawData.push_back(v3);
+
+	drawData.push_back(v1);
+	drawData.push_back(v3);
+	drawData.push_back(v4);
+}
+
+static void DrawQuads()
+{
+	glBindVertexArray(quadsVAO);
+
+	glBindBuffer(GL_ARRAY_BUFFER, quadsVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(VertexData) * drawData.size(), drawData.data(), GL_STREAM_DRAW);
+
+	glDrawArrays(GL_TRIANGLES, 0, drawData.size());
+
+	drawData.clear();
 }
 
 static void DrawTexture()
 {
 	texview::Texture& tex = curTex;
+
+	GLuint gltex = tex.glTextureHandle;
+	if(!gltex) {
+		return;
+	}
 
 	bool enableAlphaBlend = (tex.textureFlags & texview::TF_HAS_ALPHA) != 0;
 	if(overrideAlpha != -1)
@@ -675,6 +747,7 @@ static void DrawTexture()
 		glDisable( GL_FRAMEBUFFER_SRGB );
 
 	glUseProgram(shaderProgram);
+	glBindTexture(tex.glTarget, gltex);
 
 	float texW, texH;
 	tex.GetSize(&texW, &texH);
@@ -691,32 +764,34 @@ static void DrawTexture()
 		float posX = offset;
 		float posY = 0.0f;
 		const ImVec2 size(texW, texH);
-		DrawCubeQuad(tex, -1, FI_YPOS, arrayIndex, ImVec2(posX, posY), size);
+		AddCubeQuad(tex, -1, FI_YPOS, arrayIndex, ImVec2(posX, posY), size);
 
 		posX = 0.0f;
 		posY += offset;
 		const int middleIndices[4] = { FI_XNEG, FI_ZPOS, FI_XPOS, FI_ZNEG };
 		for(int i=cubeCrossVariant, n=cubeCrossVariant+4; i < n; ++i) {
 			int faceIndex = middleIndices[i % 4];
-			DrawCubeQuad(tex, -1, faceIndex, arrayIndex, ImVec2(posX, posY), size);
+			AddCubeQuad(tex, -1, faceIndex, arrayIndex, ImVec2(posX, posY), size);
 			posX += offset;
 		}
 		posX = offset;
 		posY += offset;
 
-		DrawCubeQuad(tex, -1, FI_YNEG, arrayIndex, ImVec2(posX, posY), size);
+		AddCubeQuad(tex, -1, FI_YNEG, arrayIndex, ImVec2(posX, posY), size);
+
+		DrawQuads();
 
 		glDisable( GL_FRAMEBUFFER_SRGB ); // make sure it's disabled or ImGui will look wrong
 		return;
 	}
 
 	if(viewMode == SINGLE) {
-		DrawQuad(tex, -1, arrayIndex, ImVec2(0, 0), ImVec2(texW, texH));
+		AddQuad(tex, -1, arrayIndex, ImVec2(0, 0), ImVec2(texW, texH));
 	} else if(viewMode == TILED) {
 		float tilesX = numTiles[0];
 		float tilesY = numTiles[1];
 		ImVec2 size(texW*tilesX, texH*tilesY);
-		DrawQuad(tex, -1, arrayIndex, ImVec2(0, 0), size, ImVec2(tilesX, tilesY));
+		AddQuad(tex, -1, arrayIndex, ImVec2(0, 0), size, ImVec2(tilesX, tilesY));
 	} else if(viewAtSameSize) {
 		int numMips = tex.GetNumMips();
 		if(viewMode == MIPMAPS_COMPACT) {
@@ -729,7 +804,7 @@ static void DrawTexture()
 			float vOffset = texH + spacingBetweenMips;
 			int rowNum = 0;
 			for(int i=0; i < numMips; ++i) {
-				DrawQuad(tex, i, arrayIndex, ImVec2(posX, posY), ImVec2(texW, texH));
+				AddQuad(tex, i, arrayIndex, ImVec2(posX, posY), ImVec2(texW, texH));
 				if(((i+1) % numHor) == 0) {
 					posY += vOffset;
 					// change horizontal direction every line
@@ -747,7 +822,7 @@ static void DrawTexture()
 			float posX = 0.0f;
 			float posY = 0.0f;
 			for(int i=0; i < numMips; ++i) {
-				DrawQuad(tex, i, arrayIndex, ImVec2(posX, posY), ImVec2(texW, texH));
+				AddQuad(tex, i, arrayIndex, ImVec2(posX, posY), ImVec2(texW, texH));
 				posX += hOffset;
 				posY += vOffset;
 			}
@@ -773,7 +848,7 @@ static void DrawTexture()
 			for(int i=0; i < numMips; ++i) {
 				float w, h;
 				tex.GetMipSize(i, &w, &h);
-				DrawQuad(tex, i, arrayIndex, ImVec2(posX, posY), ImVec2(w, h));
+				AddQuad(tex, i, arrayIndex, ImVec2(posX, posY), ImVec2(w, h));
 
 				if( (toRight && (i & 1) == 0)
 				   || (!toRight && (i & 1) == 1) ) {
@@ -792,7 +867,7 @@ static void DrawTexture()
 			for(int i=0; i < numMips; ++i) {
 				float w, h;
 				tex.GetMipSize(i, &w, &h);
-				DrawQuad(tex, i, arrayIndex, ImVec2(posX, posY), ImVec2(w, h));
+				AddQuad(tex, i, arrayIndex, ImVec2(posX, posY), ImVec2(w, h));
 				if(inRow) {
 					posX += spacingBetweenMips + w;
 				} else {
@@ -803,6 +878,8 @@ static void DrawTexture()
 			assert(0 && "unknown viewmode?!");
 		}
 	}
+
+	DrawQuads();
 
 	glDisable( GL_FRAMEBUFFER_SRGB ); // make sure it's disabled or ImGui will look wrong
 }
@@ -1071,7 +1148,6 @@ static void DrawSidebar(GLFWwindow* window)
 				if(ImGui::SliderInt("Mip Level", &mipLevel, -1, maxLevel,
 				                    miplevelString, ImGuiSliderFlags_AlwaysClamp)) {
 					mipmapLevel = mipLevel;
-					SetMipmapLevel(curTex, mipLevel);
 				}
 			}
 		}
@@ -1399,7 +1475,17 @@ int main(int argc, char** argv)
 	}
 
 	glfwSwapInterval(1); // Enable vsync
-	ktxLoadOpenGL(glfwGetProcAddress);
+
+	ktxLoadOpenGL(glfwGetProcAddress); // libktx
+
+	glGenVertexArrays(1, &quadsVAO);
+	glBindVertexArray(quadsVAO);
+	glGenBuffers(1, &quadsVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, quadsVBO);
+	glEnableVertexAttribArray(TV_ATTRIB_POSITION);
+	qglVertexAttribPointer(TV_ATTRIB_POSITION, 4, GL_FLOAT, GL_FALSE, sizeof(VertexData), 0);
+	glEnableVertexAttribArray(TV_ATTRIB_TEXCOORD);
+	qglVertexAttribPointer(TV_ATTRIB_TEXCOORD, 4, GL_FLOAT, GL_FALSE, sizeof(VertexData), offsetof(VertexData, tc));
 
 	glfwSetScrollCallback(glfwWindow, myGLFWscrollfun);
 	glfwSetKeyCallback(glfwWindow, myGLFWkeyfun);
@@ -1458,9 +1544,13 @@ int main(int argc, char** argv)
 		glfwSwapBuffers(glfwWindow);
 	}
 
-	if(shaderProgram != 0) { // if we already had one and want to replace it
+	if(shaderProgram != 0) {
 		glDeleteProgram(shaderProgram);
 	}
+	glDeleteBuffers(1, &quadsVBO);
+	quadsVBO = 0;
+	glDeleteVertexArrays(1, &quadsVAO);
+	quadsVAO = 0;
 
 	curTex.Clear(); // also frees opengl texture which must happen before shutdown
 
