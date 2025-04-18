@@ -28,6 +28,7 @@
 
 #include "data/texview_icon.h"
 #include "data/texview_icon32.h"
+#include "data/proggyvector_font.h"
 
 // a wrapper around glVertexAttribPointer() to stay sane
 // (caller doesn't have to cast to GLintptr and then void*)
@@ -55,6 +56,9 @@ static bool showGLSLeditWindow = false;
 
 static float imGuiMenuWidth = 0.0f;
 static bool imguiMenuCollapsed = false;
+
+static bool updateFont;
+static float imguiScale = 1.0f;
 
 static double zoomLevel = 1.0;
 static double transX = 10;
@@ -956,6 +960,7 @@ static void GenericFrame(GLFWwindow* window)
 		mvp[3][0] += mvp[0][0] * tx;
 		mvp[3][1] += mvp[1][1] * ty;
 	}
+	// mvp[spalte][zeile]
 
 	glUniformMatrix4fv(mvpMatrixUniform, 1, GL_FALSE, mvp[0]);
 #endif
@@ -1283,6 +1288,15 @@ static void DrawSidebar(GLFWwindow* window)
 			showAboutWindow = true;
 		}
 		ImGui::Dummy(ImVec2(8, 32));
+
+		ImGui::PushItemWidth(ImGui::CalcTextSize("100.125").x);
+		ImGui::InputFloat("ImGui Scale", &imguiScale);
+		// updating the font in realtime feels glitchy (UI scales while typing)
+		// so a button must be pressed to apply it
+		ImGui::SameLine();
+		if(ImGui::Button("Apply")) {
+			updateFont = true;
+		}
 		ImGui::Checkbox("Show ImGui Demo Window", &showImGuiDemoWindow);
 		imGuiMenuWidth = ImGui::GetWindowWidth();
 	}
@@ -1292,6 +1306,20 @@ static void DrawSidebar(GLFWwindow* window)
 
 static void ImGuiFrame(GLFWwindow* window)
 {
+	// I think right before a new imgui frame is the safest place to
+	// update (reload) the font
+	if(updateFont) {
+		updateFont = false;
+		ImGuiIO& io = ImGui::GetIO();
+		io.Fonts->Clear();
+		ImGui_ImplOpenGL3_DestroyFontsTexture();
+		ImFontConfig fontCfg;
+		strcpy( fontCfg.Name, "ProggyVector" );
+		float fontSize = 16.0f * imguiScale;
+		float fontSizeInt = std::max(1.0f, roundf( fontSize )); // font sizes are supposed to be rounded to integers (and > 0)
+		io.Fonts->AddFontFromMemoryCompressedTTF(ProggyVector_compressed_data, ProggyVector_compressed_size, fontSizeInt, nullptr);
+	}
+
 	// Start the Dear ImGui frame
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
@@ -1402,7 +1430,9 @@ static void myGLFWkeyfun(GLFWwindow* window, int key, int scancode, int action, 
 
 void myGLFWwindowcontentscalefun(GLFWwindow* window, float xscale, float yscale)
 {
-	ImGui::GetIO().FontGlobalScale = std::max(xscale, yscale);
+	//ImGui::GetIO().FontGlobalScale = std::max(xscale, yscale);
+	imguiScale = std::max(xscale, yscale);
+	updateFont = true;
 }
 
 /*
@@ -1570,6 +1600,9 @@ int main(int argc, char** argv)
 	ImGui_ImplOpenGL3_Init(glsl_version);
 
 	{
+		// according to https://github.com/glfw/glfw/issues/1968 polling events
+		// before getting the window scale works around issues on macOS
+		glfwPollEvents();
 		float xscale = 1.0f;
 		float yscale = 1.0f;
 		glfwGetWindowContentScale(glfwWindow, &xscale, &yscale);
