@@ -28,6 +28,7 @@
 
 #include "data/texview_icon.h"
 #include "data/texview_icon32.h"
+#include "data/proggyvector_font.h"
 
 // a wrapper around glVertexAttribPointer() to stay sane
 // (caller doesn't have to cast to GLintptr and then void*)
@@ -53,8 +54,12 @@ static bool showImGuiDemoWindow = false;
 static bool showAboutWindow = false;
 static bool showGLSLeditWindow = false;
 
-static float imGuiMenuWidth = 0.0f;
+static float imguiMenuWidth = 0.0f;
 static bool imguiMenuCollapsed = false;
+
+static bool updateFont;
+static float imguiScale = 1.0f;
+static ImVec2 imguiCoordScale(1.0f, 1.0f);
 
 static double zoomLevel = 1.0;
 static double transX = 10;
@@ -120,7 +125,7 @@ static void ZoomFitToWindow(GLFWwindow* window, float tw, float th, bool isCube)
 	}
 	int display_w, display_h;
 	glfwGetFramebufferSize(window, &display_w, &display_h);
-	double winW = display_w - imGuiMenuWidth;
+	double winW = display_w - imguiMenuWidth;
 	double zw = winW / tw;
 	double zh = display_h / th;
 	if(zw < zh) {
@@ -904,8 +909,6 @@ static void GenericFrame(GLFWwindow* window)
 {
 	int display_w, display_h;
 	glfwGetFramebufferSize(window, &display_w, &display_h);
-	printf("fb size x, y: %d, %d\n", display_w, display_h);
-
 	glViewport(0, 0, display_w, display_h);
 	glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w,
 	             clear_color.z * clear_color.w, clear_color.w);
@@ -913,10 +916,10 @@ static void GenericFrame(GLFWwindow* window)
 
 	glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
 
-	float sx, sy;
-	glfwGetWindowContentScale(window, &sx, &sy);
+	//float sx, sy;
+	//glfwGetWindowContentScale(window, &sx, &sy);
 
-	float xOffs = imguiMenuCollapsed ? 0.0f : imGuiMenuWidth * sx;
+	float xOffs = imguiMenuCollapsed ? 0.0f : imguiMenuWidth * imguiCoordScale.x;
 	float winW = display_w - xOffs;
 
 	glUseProgram(shaderProgram);
@@ -953,11 +956,12 @@ static void GenericFrame(GLFWwindow* window)
 	mvp[1][1] *= zoomLevel;
 	// translate by ((transX * sx) / zoomLevel, (transY * sy) / zoomLevel, 0.0)
 	{
-		float tx = (transX * sx) / zoomLevel;
-		float ty = (transY * sy) / zoomLevel;
+		float tx = (transX * imguiCoordScale.x) / zoomLevel;
+		float ty = (transY * imguiCoordScale.y) / zoomLevel;
 		mvp[3][0] += mvp[0][0] * tx;
 		mvp[3][1] += mvp[1][1] * ty;
 	}
+	// mvp[spalte][zeile]
 
 	glUniformMatrix4fv(mvpMatrixUniform, 1, GL_FALSE, mvp[0]);
 #endif
@@ -1285,8 +1289,33 @@ static void DrawSidebar(GLFWwindow* window)
 			showAboutWindow = true;
 		}
 		ImGui::Dummy(ImVec2(8, 32));
+
+		ImGui::PushItemWidth(ImGui::CalcTextSize("100.125").x);
+		ImGui::InputFloat("ImGui Scale", &imguiScale);
+		// updating the font in realtime feels glitchy (UI scales while typing)
+		// so a button must be pressed to apply it
+		ImGui::SameLine();
+		if(ImGui::Button("Apply")) {
+			updateFont = true;
+		}
+
+		// FIXME: debug shit, remove (or at least disable by default)
+		{
+			int winW, winH;
+			int fbW, fbH;
+			float scaleX, scaleY;
+			glfwGetWindowSize(window, &winW, &winH);
+			glfwGetFramebufferSize(window, &fbW, &fbH);
+			glfwGetWindowContentScale(window, &scaleX, &scaleY);
+
+			ImGui::Text("GLFW log WinSize: %d x %d", winW, winH);
+			ImGui::Text("GLFW FB size:     %d x %d", fbW, fbH);
+			ImGui::Text("     => ratio: %g ; %g", float(fbW)/winW, float(fbH)/winH);
+			ImGui::Text("GLFW WinScale: %g ; %g", scaleX, scaleY);
+		}
+
 		ImGui::Checkbox("Show ImGui Demo Window", &showImGuiDemoWindow);
-		imGuiMenuWidth = ImGui::GetWindowWidth();
+		imguiMenuWidth = ImGui::GetWindowWidth();
 	}
 	imguiMenuCollapsed = ImGui::IsWindowCollapsed();
 	ImGui::End();
@@ -1294,6 +1323,20 @@ static void DrawSidebar(GLFWwindow* window)
 
 static void ImGuiFrame(GLFWwindow* window)
 {
+	// I think right before a new imgui frame is the safest place to
+	// update (reload) the font
+	if(updateFont) {
+		updateFont = false;
+		ImGuiIO& io = ImGui::GetIO();
+		io.Fonts->Clear();
+		ImGui_ImplOpenGL3_DestroyFontsTexture();
+		ImFontConfig fontCfg;
+		strcpy( fontCfg.Name, "ProggyVector" );
+		float fontSize = 16.0f * imguiScale;
+		float fontSizeInt = std::max(1.0f, roundf( fontSize )); // font sizes are supposed to be rounded to integers (and > 0)
+		io.Fonts->AddFontFromMemoryCompressedTTF(ProggyVector_compressed_data, ProggyVector_compressed_size, fontSizeInt, nullptr);
+	}
+
 	// Start the Dear ImGui frame
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
@@ -1404,7 +1447,16 @@ static void myGLFWkeyfun(GLFWwindow* window, int key, int scancode, int action, 
 
 void myGLFWwindowcontentscalefun(GLFWwindow* window, float xscale, float yscale)
 {
-	ImGui::GetIO().FontGlobalScale = std::max(xscale, yscale);
+	//ImGui::GetIO().FontGlobalScale = std::max(xscale, yscale);
+	imguiScale = std::max(xscale, yscale);
+	updateFont = true;
+}
+
+void myGLFWwindowsizefun(GLFWwindow* window, int width, int height)
+{
+	int fbW, fbH;
+	glfwGetFramebufferSize(window, &fbW, &fbH);
+	imguiCoordScale = ImVec2( float(fbW)/width, float(fbH)/height );
 }
 
 /*
@@ -1491,18 +1543,16 @@ int main(int argc, char** argv)
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
 	#ifdef __APPLE__
 	  // https://www.khronos.org/opengl/wiki/OpenGL_Context#Forward_compatibility
 	  // says forward compat should only be enabled on macOS
 	  glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-	  glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
 	#endif
 	if(wantDebugContext) {
 		glfwWindowHint(GLFW_CONTEXT_DEBUG, GLFW_TRUE);
 	}
 	glfwWindowHint(GLFW_SRGB_CAPABLE, 1); // FIXME: this doesn't seem to make a difference visually or in behavior?!
-	glfwWindow = glfwCreateWindow(800, 600, "Texture Viewer", nullptr, nullptr);
+	glfwWindow = glfwCreateWindow(1280, 720, "Texture Viewer", nullptr, nullptr);
 	if (glfwWindow == nullptr) {
 		errprintf("Couldn't create glfw glfwWindow! Exiting..\n");
 		glfwTerminate();
@@ -1574,19 +1624,18 @@ int main(int argc, char** argv)
 	ImGui_ImplOpenGL3_Init(glsl_version);
 
 	{
+		// according to https://github.com/glfw/glfw/issues/1968 polling events
+		// before getting the window scale works around issues on macOS
+		glfwPollEvents();
 		float xscale = 1.0f;
 		float yscale = 1.0f;
-		int fb_x, fb_y;
-		int win_x, win_y;
 		glfwGetWindowContentScale(glfwWindow, &xscale, &yscale);
-		glfwGetFramebufferSize(glfwWindow, &fb_x, &fb_y);
-		glfwGetWindowSize(glfwWindow, &win_x, &win_y);
-		printf("window scale x, y: %f, %f\n", xscale, yscale);
-		printf("frambuffer size x, y: %d, %d\n", fb_x, fb_y);
-		printf("window size x, y: %d, %d\n", win_x, win_y);
-		//myGLFWwindowcontentscalefun(glfwWindow, xscale, yscale);
+		myGLFWwindowcontentscalefun(glfwWindow, xscale, yscale);
 		glfwSetWindowContentScaleCallback(glfwWindow, myGLFWwindowcontentscalefun);
-		ImGui::GetStyle().ScaleAllSizes(xscale);
+		int winW, winH;
+		glfwGetWindowSize(glfwWindow, &winW, &winH);
+		myGLFWwindowsizefun(glfwWindow, winW, winH);
+		glfwSetWindowSizeCallback(glfwWindow, myGLFWwindowsizefun);
 	}
 
 	while (!glfwWindowShouldClose(glfwWindow)) {
