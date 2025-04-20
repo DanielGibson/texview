@@ -1335,6 +1335,9 @@ static void ImGuiFrame(GLFWwindow* window)
 		float fontSize = 16.0f * imguiScale;
 		float fontSizeInt = std::max(1.0f, roundf( fontSize )); // font sizes are supposed to be rounded to integers (and > 0)
 		io.Fonts->AddFontFromMemoryCompressedTTF(ProggyVector_compressed_data, ProggyVector_compressed_size, fontSizeInt, nullptr);
+		// TODO: also scale the sizes of the style?
+		//       would be ImGui::GetStyle().ScaleAllSizes(imguiScale)
+		//       BUT first the style would have to be reset to its default!
 	}
 
 	// Start the Dear ImGui frame
@@ -1447,9 +1450,21 @@ static void myGLFWkeyfun(GLFWwindow* window, int key, int scancode, int action, 
 
 void myGLFWwindowcontentscalefun(GLFWwindow* window, float xscale, float yscale)
 {
-	//ImGui::GetIO().FontGlobalScale = std::max(xscale, yscale);
-	imguiScale = std::max(xscale, yscale);
-	updateFont = true;
+	float sx = 1.0;
+	float sy = 1.0;
+	// imgui already scales by framebuffersize / windowsize
+	// only do additional scaling if contentscale suggests even more scaling
+	// (also handles framebuffersize == windowsize but contentscale > 1, like on highdpi KDE/X11)
+	// TODO: are there situations where we may wanna scale *down*?
+	if(xscale > imguiCoordScale.x)
+		sx = xscale / imguiCoordScale.x;
+	if(yscale > imguiCoordScale.y)
+		sy = yscale / imguiCoordScale.y;
+	float is = std::max(sx, sy);
+	if(is != imguiScale) {
+		imguiScale = is;
+		updateFont = true;
+	}
 }
 
 void myGLFWwindowsizefun(GLFWwindow* window, int width, int height)
@@ -1627,15 +1642,16 @@ int main(int argc, char** argv)
 		// according to https://github.com/glfw/glfw/issues/1968 polling events
 		// before getting the window scale works around issues on macOS
 		glfwPollEvents();
+		int winW, winH;
+		glfwGetWindowSize(glfwWindow, &winW, &winH);
+		myGLFWwindowsizefun(glfwWindow, winW, winH);
+		glfwSetWindowSizeCallback(glfwWindow, myGLFWwindowsizefun);
+
 		float xscale = 1.0f;
 		float yscale = 1.0f;
 		glfwGetWindowContentScale(glfwWindow, &xscale, &yscale);
 		myGLFWwindowcontentscalefun(glfwWindow, xscale, yscale);
 		glfwSetWindowContentScaleCallback(glfwWindow, myGLFWwindowcontentscalefun);
-		int winW, winH;
-		glfwGetWindowSize(glfwWindow, &winW, &winH);
-		myGLFWwindowsizefun(glfwWindow, winW, winH);
-		glfwSetWindowSizeCallback(glfwWindow, myGLFWwindowsizefun);
 	}
 
 	while (!glfwWindowShouldClose(glfwWindow)) {
