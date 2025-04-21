@@ -59,7 +59,7 @@ static bool imguiMenuCollapsed = false;
 
 static bool updateFont;
 static float imguiScale = 1.0f;
-static ImVec2 imguiCoordScale(1.0f, 1.0f);
+static ImGuiStyle defaultStyle; // to reset style sizes before calling ScaleAllSizes()
 
 static double zoomLevel = 1.0;
 static double transX = 10;
@@ -916,8 +916,7 @@ static void GenericFrame(GLFWwindow* window)
 
 	glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
 
-	//float sx, sy;
-	//glfwGetWindowContentScale(window, &sx, &sy);
+	ImVec2 imguiCoordScale = ImGui::GetIO().DisplayFramebufferScale;
 
 	float xOffs = imguiMenuCollapsed ? 0.0f : imguiMenuWidth * imguiCoordScale.x;
 	float winW = display_w - xOffs;
@@ -1111,34 +1110,47 @@ static void DrawSidebar(GLFWwindow* window)
 		}
 		float fontWrapWidth = ImGui::CalcTextSize("0123456789abcdef0123456789ABCDEF").x;
 		ImGui::PushTextWrapPos(fontWrapWidth);
-		//ImGui::TextWrapped("File: %s", curTex.name.c_str());
-		ImGui::Text("File: ");
-		ImGui::BeginDisabled(true);
-		ImGui::TextWrapped("%s", curTex.name.c_str());
-		ImGui::EndDisabled();
-		ImGui::Text("Format: %s", curTex.formatName.c_str());
-		float tw, th;
-		curTex.GetSize(&tw, &th);
-		ImGui::Text("Texture Size: %d x %d", (int)tw, (int)th);
-		ImGui::Text("MipMap Levels: %d", curTex.GetNumMips());
+		float texWidth, texHeight;
+		curTex.GetSize(&texWidth, &texHeight);
 		bool isCubemap = curTex.IsCubemap();
-		int numCubeFaces = curTex.GetNumCubemapFaces();
-		if(curTex.IsArray()) {
-			ImGui::Text("%sArray Elements: %d", isCubemap ? "Cubemap " : "", curTex.GetNumElements());
-		} else if(isCubemap) {
-			if(numCubeFaces == 6) {
-				ImGui::Text("Cubemap Texture");
-			} else {
-				ImGui::Text("Cubemap Texture with %d faces", curTex.GetNumCubemapFaces());
-			}
-		}
-		const char* alphaStr = "no";
 		bool texHasAlpha = (curTex.textureFlags & texview::TF_HAS_ALPHA) != 0;
-		if(texHasAlpha) {
-			alphaStr = (curTex.textureFlags & texview::TF_PREMUL_ALPHA) ? "Premultiplied" : "Straight";
-		}
 		bool texIsSRGB = (curTex.textureFlags & texview::TF_SRGB) != 0;
-		ImGui::Text("Alpha: %s - sRGB: %s", alphaStr, texIsSRGB ? "yes" : "no");
+
+		float unindentWidth = ImGui::GetStyle().FramePadding.x;
+		// move the treenode arrow a bit to the left to waste less space
+		ImGui::Unindent(unindentWidth);
+		if(ImGui::TreeNode("Texture Info")) { // ImGuiTreeNodeFlags_SpanFullWidth ?
+			// move the treenode contents a bit to the left to waste less space
+			ImGui::Unindent(unindentWidth);
+			//ImGui::TextWrapped("File: %s", curTex.name.c_str());
+			ImGui::Text("File: ");
+			ImGui::BeginDisabled(true);
+			ImGui::TextWrapped("%s", curTex.name.c_str());
+			ImGui::EndDisabled();
+			ImGui::Text("Format: %s", curTex.formatName.c_str());
+			ImGui::Text("Texture Size: %d x %d", (int)texWidth, (int)texHeight);
+			ImGui::Text("MipMap Levels: %d", curTex.GetNumMips());
+			int numCubeFaces = curTex.GetNumCubemapFaces();
+			if(curTex.IsArray()) {
+				ImGui::Text("%sArray Layers: %d", isCubemap ? "Cubemap " : "", curTex.GetNumElements());
+			} else if(isCubemap) {
+				if(numCubeFaces == 6) {
+					ImGui::Text("Cubemap Texture");
+				} else {
+					ImGui::Text("Cubemap Texture with %d faces", curTex.GetNumCubemapFaces());
+				}
+			}
+			const char* alphaStr = "no";
+			if(texHasAlpha) {
+				alphaStr = (curTex.textureFlags & texview::TF_PREMUL_ALPHA) ? "Premultiplied" : "Straight";
+			}
+			ImGui::Text("Alpha: %s - sRGB: %s", alphaStr, texIsSRGB ? "yes" : "no");
+			ImGui::Indent(unindentWidth);
+			ImGui::TreePop();
+		} else {
+			ImGui::SetItemTooltip( "Click to show information about the Texture" );
+		}
+		ImGui::Indent(unindentWidth);
 
 		ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 		ImGui::PushItemWidth(fontWrapWidth - ImGui::CalcTextSize("View Mode  ").x);
@@ -1147,7 +1159,7 @@ static void DrawSidebar(GLFWwindow* window)
 			zoomLevel = zl;
 		}
 		if(ImGui::Button("Fit to Window")) {
-			ZoomFitToWindow(window, tw, th, isCubemap);
+			ZoomFitToWindow(window, texWidth, texHeight, isCubemap);
 		}
 		ImGui::SameLine();
 		if(ImGui::Button("Reset Zoom")) {
@@ -1207,8 +1219,9 @@ static void DrawSidebar(GLFWwindow* window)
 		}
 		if(curTex.IsArray()) {
 			int numElems = curTex.GetNumElements();
-			ImGui::SliderInt("Array Index", &textureArrayIndex, 0, numElems-1,
+			ImGui::SliderInt("Layer", &textureArrayIndex, 0, numElems-1,
 			                 "%d", ImGuiSliderFlags_AlwaysClamp);
+			ImGui::SetItemTooltip("Index in Texture Array");
 		}
 
 		ImGui::Spacing();
@@ -1292,14 +1305,11 @@ static void DrawSidebar(GLFWwindow* window)
 
 		ImGui::PushItemWidth(ImGui::CalcTextSize("100.125").x);
 		ImGui::InputFloat("ImGui Scale", &imguiScale);
-		// updating the font in realtime feels glitchy (UI scales while typing)
-		// so a button must be pressed to apply it
-		ImGui::SameLine();
-		if(ImGui::Button("Apply")) {
+		if(ImGui::IsItemDeactivatedAfterEdit()) {
 			updateFont = true;
 		}
 
-		// FIXME: debug shit, remove (or at least disable by default)
+#if 0 // for debugging scaling issues
 		{
 			int winW, winH;
 			int fbW, fbH;
@@ -1313,12 +1323,30 @@ static void DrawSidebar(GLFWwindow* window)
 			ImGui::Text("     => ratio: %g ; %g", float(fbW)/winW, float(fbH)/winH);
 			ImGui::Text("GLFW WinScale: %g ; %g", scaleX, scaleY);
 		}
+#endif
 
 		ImGui::Checkbox("Show ImGui Demo Window", &showImGuiDemoWindow);
 		imguiMenuWidth = ImGui::GetWindowWidth();
 	}
 	imguiMenuCollapsed = ImGui::IsWindowCollapsed();
 	ImGui::End();
+}
+
+static void SetImGuiStyle()
+{
+	ImGuiStyle& style = ImGui::GetStyle();
+	// reset to default, esp. relevant for the sizes
+	style = defaultStyle;
+
+	ImGui::StyleColorsDark(&style);
+	// make it look a bit nicer with rounded edges
+	style.WindowRounding = 2.0f;
+	style.FrameRounding = 3.0f;
+	style.FramePadding = ImVec2( 6.0f, 3.0f );
+	//style.ChildRounding = 6.0f;
+	style.ScrollbarRounding = 8.0f;
+	style.GrabRounding = 3.0f;
+	style.PopupRounding = 2.0f;
 }
 
 static void ImGuiFrame(GLFWwindow* window)
@@ -1335,6 +1363,10 @@ static void ImGuiFrame(GLFWwindow* window)
 		float fontSize = 16.0f * imguiScale;
 		float fontSizeInt = std::max(1.0f, roundf( fontSize )); // font sizes are supposed to be rounded to integers (and > 0)
 		io.Fonts->AddFontFromMemoryCompressedTTF(ProggyVector_compressed_data, ProggyVector_compressed_size, fontSizeInt, nullptr);
+		SetImGuiStyle();
+		if(imguiScale != 1.0f) {
+			ImGui::GetStyle().ScaleAllSizes(imguiScale);
+		}
 	}
 
 	// Start the Dear ImGui frame
@@ -1445,18 +1477,29 @@ static void myGLFWkeyfun(GLFWwindow* window, int key, int scancode, int action, 
 	}
 }
 
-void myGLFWwindowcontentscalefun(GLFWwindow* window, float xscale, float yscale)
+static void myGLFWwindowcontentscalefun(GLFWwindow* window, float xscale, float yscale)
 {
-	//ImGui::GetIO().FontGlobalScale = std::max(xscale, yscale);
-	imguiScale = std::max(xscale, yscale);
-	updateFont = true;
-}
-
-void myGLFWwindowsizefun(GLFWwindow* window, int width, int height)
-{
-	int fbW, fbH;
+	float sx = 1.0;
+	float sy = 1.0;
+	// imgui already scales by framebuffersize / windowsize (io.DisplayFramebufferScale)
+	// only do additional scaling if contentscale suggests even more scaling
+	// (also handles framebuffersize == windowsize but contentscale > 1, like on highdpi KDE/X11)
+	// TODO: are there situations where we may wanna scale *down*?
+	int fbW=0, fbH=0;
 	glfwGetFramebufferSize(window, &fbW, &fbH);
-	imguiCoordScale = ImVec2( float(fbW)/width, float(fbH)/height );
+	int winW=0, winH=0;
+	glfwGetWindowSize(window, &winW, &winH);
+	// Note: io.DisplayFramebufferScale isn't set yet, so calculate the same value here..
+	ImVec2 imguiCoordScale(float(fbW)/winW, float(fbH)/winH);
+	if(xscale > imguiCoordScale.x)
+		sx = xscale / imguiCoordScale.x;
+	if(yscale > imguiCoordScale.y)
+		sy = yscale / imguiCoordScale.y;
+	float is = std::max(sx, sy);
+	if(is != imguiScale) {
+		imguiScale = is;
+		updateFont = true;
+	}
 }
 
 /*
@@ -1607,17 +1650,8 @@ int main(int argc, char** argv)
 	ImGuiIO& io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
 
-	// Setup Dear ImGui style
-	ImGui::StyleColorsDark();
-	// make it look a bit nicer with rounded edges
-	ImGuiStyle& style = ImGui::GetStyle();
-	style.WindowRounding = 2.0f;
-	style.FrameRounding = 3.0f;
-	style.FramePadding = ImVec2( 6.0f, 3.0f );
-	//style.ChildRounding = 6.0f;
-	style.ScrollbarRounding = 8.0f;
-	style.GrabRounding = 3.0f;
-	style.PopupRounding = 2.0f;
+	defaultStyle = ImGui::GetStyle(); // get default unscaled style
+	SetImGuiStyle();
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplGlfw_InitForOpenGL(glfwWindow, true);
@@ -1632,10 +1666,6 @@ int main(int argc, char** argv)
 		glfwGetWindowContentScale(glfwWindow, &xscale, &yscale);
 		myGLFWwindowcontentscalefun(glfwWindow, xscale, yscale);
 		glfwSetWindowContentScaleCallback(glfwWindow, myGLFWwindowcontentscalefun);
-		int winW, winH;
-		glfwGetWindowSize(glfwWindow, &winW, &winH);
-		myGLFWwindowsizefun(glfwWindow, winW, winH);
-		glfwSetWindowSizeCallback(glfwWindow, myGLFWwindowsizefun);
 	}
 
 	while (!glfwWindowShouldClose(glfwWindow)) {
