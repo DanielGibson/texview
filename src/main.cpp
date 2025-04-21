@@ -59,7 +59,7 @@ static bool imguiMenuCollapsed = false;
 
 static bool updateFont;
 static float imguiScale = 1.0f;
-static ImVec2 imguiCoordScale(1.0f, 1.0f);
+static ImGuiStyle defaultStyle; // to reset style sizes before calling ScaleAllSizes()
 
 static double zoomLevel = 1.0;
 static double transX = 10;
@@ -916,8 +916,7 @@ static void GenericFrame(GLFWwindow* window)
 
 	glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
 
-	//float sx, sy;
-	//glfwGetWindowContentScale(window, &sx, &sy);
+	ImVec2 imguiCoordScale = ImGui::GetIO().DisplayFramebufferScale;
 
 	float xOffs = imguiMenuCollapsed ? 0.0f : imguiMenuWidth * imguiCoordScale.x;
 	float winW = display_w - xOffs;
@@ -1292,10 +1291,7 @@ static void DrawSidebar(GLFWwindow* window)
 
 		ImGui::PushItemWidth(ImGui::CalcTextSize("100.125").x);
 		ImGui::InputFloat("ImGui Scale", &imguiScale);
-		// updating the font in realtime feels glitchy (UI scales while typing)
-		// so a button must be pressed to apply it
-		ImGui::SameLine();
-		if(ImGui::Button("Apply")) {
+		if(ImGui::IsItemDeactivatedAfterEdit()) {
 			updateFont = true;
 		}
 
@@ -1321,6 +1317,23 @@ static void DrawSidebar(GLFWwindow* window)
 	ImGui::End();
 }
 
+static void SetImGuiStyle()
+{
+	ImGuiStyle& style = ImGui::GetStyle();
+	// reset to default, esp. relevant for the sizes
+	style = defaultStyle;
+
+	ImGui::StyleColorsDark(&style);
+	// make it look a bit nicer with rounded edges
+	style.WindowRounding = 2.0f;
+	style.FrameRounding = 3.0f;
+	style.FramePadding = ImVec2( 6.0f, 3.0f );
+	//style.ChildRounding = 6.0f;
+	style.ScrollbarRounding = 8.0f;
+	style.GrabRounding = 3.0f;
+	style.PopupRounding = 2.0f;
+}
+
 static void ImGuiFrame(GLFWwindow* window)
 {
 	// I think right before a new imgui frame is the safest place to
@@ -1335,9 +1348,10 @@ static void ImGuiFrame(GLFWwindow* window)
 		float fontSize = 16.0f * imguiScale;
 		float fontSizeInt = std::max(1.0f, roundf( fontSize )); // font sizes are supposed to be rounded to integers (and > 0)
 		io.Fonts->AddFontFromMemoryCompressedTTF(ProggyVector_compressed_data, ProggyVector_compressed_size, fontSizeInt, nullptr);
-		// TODO: also scale the sizes of the style?
-		//       would be ImGui::GetStyle().ScaleAllSizes(imguiScale)
-		//       BUT first the style would have to be reset to its default!
+		SetImGuiStyle();
+		if(imguiScale != 1.0f) {
+			ImGui::GetStyle().ScaleAllSizes(imguiScale);
+		}
 	}
 
 	// Start the Dear ImGui frame
@@ -1448,14 +1462,20 @@ static void myGLFWkeyfun(GLFWwindow* window, int key, int scancode, int action, 
 	}
 }
 
-void myGLFWwindowcontentscalefun(GLFWwindow* window, float xscale, float yscale)
+static void myGLFWwindowcontentscalefun(GLFWwindow* window, float xscale, float yscale)
 {
 	float sx = 1.0;
 	float sy = 1.0;
-	// imgui already scales by framebuffersize / windowsize
+	// imgui already scales by framebuffersize / windowsize (io.DisplayFramebufferScale)
 	// only do additional scaling if contentscale suggests even more scaling
 	// (also handles framebuffersize == windowsize but contentscale > 1, like on highdpi KDE/X11)
 	// TODO: are there situations where we may wanna scale *down*?
+	int fbW=0, fbH=0;
+	glfwGetFramebufferSize(window, &fbW, &fbH);
+	int winW=0, winH=0;
+	glfwGetWindowSize(window, &winW, &winH);
+	// Note: io.DisplayFramebufferScale isn't set yet, so calculate the same value here..
+	ImVec2 imguiCoordScale(float(fbW)/winW, float(fbH)/winH);
 	if(xscale > imguiCoordScale.x)
 		sx = xscale / imguiCoordScale.x;
 	if(yscale > imguiCoordScale.y)
@@ -1465,13 +1485,6 @@ void myGLFWwindowcontentscalefun(GLFWwindow* window, float xscale, float yscale)
 		imguiScale = is;
 		updateFont = true;
 	}
-}
-
-void myGLFWwindowsizefun(GLFWwindow* window, int width, int height)
-{
-	int fbW, fbH;
-	glfwGetFramebufferSize(window, &fbW, &fbH);
-	imguiCoordScale = ImVec2( float(fbW)/width, float(fbH)/height );
 }
 
 /*
@@ -1622,17 +1635,8 @@ int main(int argc, char** argv)
 	ImGuiIO& io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
 
-	// Setup Dear ImGui style
-	ImGui::StyleColorsDark();
-	// make it look a bit nicer with rounded edges
-	ImGuiStyle& style = ImGui::GetStyle();
-	style.WindowRounding = 2.0f;
-	style.FrameRounding = 3.0f;
-	style.FramePadding = ImVec2( 6.0f, 3.0f );
-	//style.ChildRounding = 6.0f;
-	style.ScrollbarRounding = 8.0f;
-	style.GrabRounding = 3.0f;
-	style.PopupRounding = 2.0f;
+	defaultStyle = ImGui::GetStyle(); // get default unscaled style
+	SetImGuiStyle();
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplGlfw_InitForOpenGL(glfwWindow, true);
@@ -1642,11 +1646,6 @@ int main(int argc, char** argv)
 		// according to https://github.com/glfw/glfw/issues/1968 polling events
 		// before getting the window scale works around issues on macOS
 		glfwPollEvents();
-		int winW, winH;
-		glfwGetWindowSize(glfwWindow, &winW, &winH);
-		myGLFWwindowsizefun(glfwWindow, winW, winH);
-		glfwSetWindowSizeCallback(glfwWindow, myGLFWwindowsizefun);
-
 		float xscale = 1.0f;
 		float yscale = 1.0f;
 		glfwGetWindowContentScale(glfwWindow, &xscale, &yscale);
