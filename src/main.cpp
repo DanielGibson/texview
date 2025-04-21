@@ -30,6 +30,10 @@
 #include "data/texview_icon32.h"
 #include "data/proggyvector_font.h"
 
+#ifdef __APPLE__
+	#include <ApplicationServices/ApplicationServices.h>
+#endif
+
 // a wrapper around glVertexAttribPointer() to stay sane
 // (caller doesn't have to cast to GLintptr and then void*)
 static inline void
@@ -91,6 +95,16 @@ static enum ViewMode {
 static bool viewAtSameSize = true;
 static int spacingBetweenMips = 2;
 static int numTiles[2] = {2, 2};
+
+
+#ifdef __APPLE__
+	void GetPixelWidthHeight_OSX(int* pixelWidth, int* pixelHeight)
+	{
+		CGDirectDisplayID display = CGMainDisplayID();
+		*pixelWidth = CGDisplayPixelsWide(display);
+		*pixelHeight = CGDisplayPixelsHigh(display);
+	}
+#endif
 
 static void glfw_error_callback(int error, const char* description)
 {
@@ -1309,14 +1323,23 @@ static void DrawSidebar(GLFWwindow* window)
 			updateFont = true;
 		}
 
-#if 0 // for debugging scaling issues
+#if 1 // for debugging scaling issues
 		{
 			int winW, winH;
 			int fbW, fbH;
 			float scaleX, scaleY;
-			glfwGetWindowSize(window, &winW, &winH);
+
 			glfwGetFramebufferSize(window, &fbW, &fbH);
-			glfwGetWindowContentScale(window, &scaleX, &scaleY);
+			
+			#ifdef __APPLE__
+				GetPixelWidthHeight_OSX(&winW, &winH);
+				scaleX = (float)fbW/(float)winW;
+				scaleY = (float)fbH/(float)winH;
+				
+			#else
+				glfwGetWindowSize(window, &winW, &winH);
+				glfwGetWindowContentScale(window, &scaleX, &scaleY);
+			#endif
 
 			ImGui::Text("GLFW log WinSize: %d x %d", winW, winH);
 			ImGui::Text("GLFW FB size:     %d x %d", fbW, fbH);
@@ -1488,7 +1511,13 @@ static void myGLFWwindowcontentscalefun(GLFWwindow* window, float xscale, float 
 	int fbW=0, fbH=0;
 	glfwGetFramebufferSize(window, &fbW, &fbH);
 	int winW=0, winH=0;
-	glfwGetWindowSize(window, &winW, &winH);
+
+	#ifdef __APPLE__
+		GetPixelWidthHeight_OSX(&winW, &winH);
+	#else
+		glfwGetWindowSize(window, &winW, &winH);
+	#endif
+
 	// Note: io.DisplayFramebufferScale isn't set yet, so calculate the same value here..
 	ImVec2 imguiCoordScale(float(fbW)/winW, float(fbH)/winH);
 	if(xscale > imguiCoordScale.x)
