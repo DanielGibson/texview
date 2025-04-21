@@ -1121,34 +1121,47 @@ static void DrawSidebar(GLFWwindow* window)
 		}
 		float fontWrapWidth = ImGui::CalcTextSize("0123456789abcdef0123456789ABCDEF").x;
 		ImGui::PushTextWrapPos(fontWrapWidth);
-		//ImGui::TextWrapped("File: %s", curTex.name.c_str());
-		ImGui::Text("File: ");
-		ImGui::BeginDisabled(true);
-		ImGui::TextWrapped("%s", curTex.name.c_str());
-		ImGui::EndDisabled();
-		ImGui::Text("Format: %s", curTex.formatName.c_str());
-		float tw, th;
-		curTex.GetSize(&tw, &th);
-		ImGui::Text("Texture Size: %d x %d", (int)tw, (int)th);
-		ImGui::Text("MipMap Levels: %d", curTex.GetNumMips());
+		float texWidth, texHeight;
+		curTex.GetSize(&texWidth, &texHeight);
 		bool isCubemap = curTex.IsCubemap();
-		int numCubeFaces = curTex.GetNumCubemapFaces();
-		if(curTex.IsArray()) {
-			ImGui::Text("%sArray Elements: %d", isCubemap ? "Cubemap " : "", curTex.GetNumElements());
-		} else if(isCubemap) {
-			if(numCubeFaces == 6) {
-				ImGui::Text("Cubemap Texture");
-			} else {
-				ImGui::Text("Cubemap Texture with %d faces", curTex.GetNumCubemapFaces());
-			}
-		}
-		const char* alphaStr = "no";
 		bool texHasAlpha = (curTex.textureFlags & texview::TF_HAS_ALPHA) != 0;
-		if(texHasAlpha) {
-			alphaStr = (curTex.textureFlags & texview::TF_PREMUL_ALPHA) ? "Premultiplied" : "Straight";
-		}
 		bool texIsSRGB = (curTex.textureFlags & texview::TF_SRGB) != 0;
-		ImGui::Text("Alpha: %s - sRGB: %s", alphaStr, texIsSRGB ? "yes" : "no");
+
+		float unindentWidth = ImGui::GetStyle().FramePadding.x;
+		// move the treenode arrow a bit to the left to waste less space
+		ImGui::Unindent(unindentWidth);
+		if(ImGui::TreeNode("Texture Info")) { // ImGuiTreeNodeFlags_SpanFullWidth ?
+			// move the treenode contents a bit to the left to waste less space
+			ImGui::Unindent(unindentWidth);
+			//ImGui::TextWrapped("File: %s", curTex.name.c_str());
+			ImGui::Text("File: ");
+			ImGui::BeginDisabled(true);
+			ImGui::TextWrapped("%s", curTex.name.c_str());
+			ImGui::EndDisabled();
+			ImGui::Text("Format: %s", curTex.formatName.c_str());
+			ImGui::Text("Texture Size: %d x %d", (int)texWidth, (int)texHeight);
+			ImGui::Text("MipMap Levels: %d", curTex.GetNumMips());
+			int numCubeFaces = curTex.GetNumCubemapFaces();
+			if(curTex.IsArray()) {
+				ImGui::Text("%sArray Layers: %d", isCubemap ? "Cubemap " : "", curTex.GetNumElements());
+			} else if(isCubemap) {
+				if(numCubeFaces == 6) {
+					ImGui::Text("Cubemap Texture");
+				} else {
+					ImGui::Text("Cubemap Texture with %d faces", curTex.GetNumCubemapFaces());
+				}
+			}
+			const char* alphaStr = "no";
+			if(texHasAlpha) {
+				alphaStr = (curTex.textureFlags & texview::TF_PREMUL_ALPHA) ? "Premultiplied" : "Straight";
+			}
+			ImGui::Text("Alpha: %s - sRGB: %s", alphaStr, texIsSRGB ? "yes" : "no");
+			ImGui::Indent(unindentWidth);
+			ImGui::TreePop();
+		} else {
+			ImGui::SetItemTooltip( "Click to show information about the Texture" );
+		}
+		ImGui::Indent(unindentWidth);
 
 		ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 		ImGui::PushItemWidth(fontWrapWidth - ImGui::CalcTextSize("View Mode  ").x);
@@ -1157,7 +1170,7 @@ static void DrawSidebar(GLFWwindow* window)
 			zoomLevel = zl;
 		}
 		if(ImGui::Button("Fit to Window")) {
-			ZoomFitToWindow(window, tw, th, isCubemap);
+			ZoomFitToWindow(window, texWidth, texHeight, isCubemap);
 		}
 		ImGui::SameLine();
 		if(ImGui::Button("Reset Zoom")) {
@@ -1217,8 +1230,9 @@ static void DrawSidebar(GLFWwindow* window)
 		}
 		if(curTex.IsArray()) {
 			int numElems = curTex.GetNumElements();
-			ImGui::SliderInt("Array Index", &textureArrayIndex, 0, numElems-1,
+			ImGui::SliderInt("Layer", &textureArrayIndex, 0, numElems-1,
 			                 "%d", ImGuiSliderFlags_AlwaysClamp);
+			ImGui::SetItemTooltip("Index in Texture Array");
 		}
 
 		ImGui::Spacing();
@@ -1306,7 +1320,7 @@ static void DrawSidebar(GLFWwindow* window)
 			updateFont = true;
 		}
 
-		// FIXME: debug shit, remove (or at least disable by default)
+#if 0 // for debugging scaling issues
 		{
 			int winW, winH;
 			int fbW, fbH;
@@ -1320,6 +1334,7 @@ static void DrawSidebar(GLFWwindow* window)
 			ImGui::Text("     => ratio: %g ; %g", float(fbW)/winW, float(fbH)/winH);
 			ImGui::Text("GLFW WinScale: %g ; %g", scaleX, scaleY);
 		}
+#endif
 
 		ImGui::Checkbox("Show ImGui Demo Window", &showImGuiDemoWindow);
 		imguiMenuWidth = ImGui::GetWindowWidth();
