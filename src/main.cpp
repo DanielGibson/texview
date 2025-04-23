@@ -1748,17 +1748,17 @@ int main(int argc, char** argv)
 		// - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy of the keyboard data.
 		// Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
 		glfwPollEvents();
-		if (glfwGetWindowAttrib(glfwWindow, GLFW_ICONIFIED) != 0)
-		{
-			ImGui_ImplGlfw_Sleep(32);
-			continue;
-		}
 
 		GenericFrame(glfwWindow);
 
 		ImGuiFrame(glfwWindow);
 
 		glfwSwapBuffers(glfwWindow);
+
+		if (glfwGetWindowAttrib(glfwWindow, GLFW_ICONIFIED) != 0) {
+			ImGui_ImplGlfw_Sleep(32);
+			continue;
+		}
 	}
 
 	if(shaderProgram != 0) {
