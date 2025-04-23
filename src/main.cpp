@@ -28,6 +28,7 @@
 
 #include "data/texview_icon.h"
 #include "data/texview_icon32.h"
+#include "data/proggyvector_font.h"
 
 // a wrapper around glVertexAttribPointer() to stay sane
 // (caller doesn't have to cast to GLintptr and then void*)
@@ -53,8 +54,12 @@ static bool showImGuiDemoWindow = false;
 static bool showAboutWindow = false;
 static bool showGLSLeditWindow = false;
 
-static float imGuiMenuWidth = 0.0f;
+static float imguiMenuWidth = 0.0f;
 static bool imguiMenuCollapsed = false;
+
+static bool updateFont;
+static float imguiScale = 1.0f;
+static ImGuiStyle defaultStyle; // to reset style sizes before calling ScaleAllSizes()
 
 static double zoomLevel = 1.0;
 static double transX = 10;
@@ -120,7 +125,7 @@ static void ZoomFitToWindow(GLFWwindow* window, float tw, float th, bool isCube)
 	}
 	int display_w, display_h;
 	glfwGetFramebufferSize(window, &display_w, &display_h);
-	double winW = display_w - imGuiMenuWidth;
+	double winW = display_w - imguiMenuWidth;
 	double zw = winW / tw;
 	double zh = display_h / th;
 	if(zw < zh) {
@@ -911,10 +916,9 @@ static void GenericFrame(GLFWwindow* window)
 
 	glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
 
-	float sx, sy;
-	glfwGetWindowContentScale(window, &sx, &sy);
+	ImVec2 imguiCoordScale = ImGui::GetIO().DisplayFramebufferScale;
 
-	float xOffs = imguiMenuCollapsed ? 0.0f : imGuiMenuWidth * sx;
+	float xOffs = imguiMenuCollapsed ? 0.0f : imguiMenuWidth * imguiCoordScale.x;
 	float winW = display_w - xOffs;
 
 	glUseProgram(shaderProgram);
@@ -951,8 +955,8 @@ static void GenericFrame(GLFWwindow* window)
 	mvp[1][1] *= zoomLevel;
 	// translate by ((transX * sx) / zoomLevel, (transY * sy) / zoomLevel, 0.0)
 	{
-		float tx = (transX * sx) / zoomLevel;
-		float ty = (transY * sy) / zoomLevel;
+		float tx = (transX * imguiCoordScale.x) / zoomLevel;
+		float ty = (transY * imguiCoordScale.y) / zoomLevel;
 		mvp[3][0] += mvp[0][0] * tx;
 		mvp[3][1] += mvp[1][1] * ty;
 	}
@@ -998,6 +1002,18 @@ static void OpenFilePicker() {
 		// TODO: imgui-only alternative, maybe https://github.com/aiekick/ImGuiFileDialog
 		errprintf("Built without NativeFileDialog support, have no alternative (yet)!\n");
 #endif
+}
+
+// should return the correct value even if ImGui itself hasn't updated
+// io.DisplayFramebufferScale yet
+static ImVec2 GetImGuiDisplayScale(GLFWwindow* window)
+{
+	int fbW=0, fbH=0;
+	glfwGetFramebufferSize(window, &fbW, &fbH);
+	int winW=0, winH=0;
+	glfwGetWindowSize(window, &winW, &winH);
+	// Note: io.DisplayFramebufferScale isn't set yet, so calculate the same value here..
+	return ImVec2(float(fbW)/winW, float(fbH)/winH);
 }
 
 static void DrawAboutWindow(GLFWwindow* window)
@@ -1283,15 +1299,168 @@ static void DrawSidebar(GLFWwindow* window)
 			showAboutWindow = true;
 		}
 		ImGui::Dummy(ImVec2(8, 32));
+
+		ImGui::PushItemWidth(ImGui::CalcTextSize("100.125").x);
+		ImGui::InputFloat("ImGui Scale", &imguiScale);
+		if(ImGui::IsItemDeactivatedAfterEdit()) {
+			updateFont = true;
+		}
+
+		// FIXME: debug shit, remove (or at least disable by default)
+		{
+			int winW, winH;
+			int fbW, fbH;
+			float scaleX, scaleY;
+			glfwGetWindowSize(window, &winW, &winH);
+			glfwGetFramebufferSize(window, &fbW, &fbH);
+			glfwGetWindowContentScale(window, &scaleX, &scaleY);
+
+			ImGui::Text("GLFW log WinSize: %d x %d", winW, winH);
+			ImGui::Text("GLFW FB size:     %d x %d", fbW, fbH);
+			ImGui::Text("     => ratio: %g ; %g", float(fbW)/winW, float(fbH)/winH);
+			ImGui::Text("GLFW WinScale: %g ; %g", scaleX, scaleY);
+		}
+
 		ImGui::Checkbox("Show ImGui Demo Window", &showImGuiDemoWindow);
-		imGuiMenuWidth = ImGui::GetWindowWidth();
+		imguiMenuWidth = ImGui::GetWindowWidth();
 	}
 	imguiMenuCollapsed = ImGui::IsWindowCollapsed();
 	ImGui::End();
 }
 
+static void SetImGuiStyle()
+{
+	ImGuiStyle& style = ImGui::GetStyle();
+	// reset to default, esp. relevant for the sizes
+	style = defaultStyle;
+
+	ImGui::StyleColorsDark(&style);
+	// make it look a bit nicer with rounded edges
+	style.WindowRounding = 2.0f;
+	style.FrameRounding = 3.0f;
+	style.FramePadding = ImVec2( 6.0f, 3.0f );
+	//style.ChildRounding = 6.0f;
+	style.ScrollbarRounding = 8.0f;
+	style.GrabRounding = 3.0f;
+	style.PopupRounding = 2.0f;
+}
+
+static void UpdateFontsAndScaling(GLFWwindow* window)
+{
+	/* This here is about scaling sizes of ImGui fonts and styling parameters,
+	 * mostly for High-DPI (Retina, whatever) displays.
+	 * Operating systems/windowing systems handle "High-DPI" in two (3) different ways:
+	 * 1. Both the framebuffer and window coordinates (used for window size and
+	 *    mouse coordinates) are in physical pixels, just like they are in traditional
+	 *    display modes. The operating/windowing system somehow communicates how
+	 *    much the application should scale its user interface.
+	 *    This is what MS Windows and X11 do, at least in the modes used by glfw.
+	 * 2. The framebuffer is in physical pixels, but window coordinates (window size,
+	 *    mouse coordinates, ...) are in logical points that have a lower resolution.
+	 *    For example on macOS with High-DPI "Retina" displays, requesting
+	 *    a 1280x720 window gives you a window that is displayed as 2560x1440 pixels
+	 *    on your screen (and that's also the size of the framebuffer), but
+	 *    mouse coordinates (or values used for resizing the window etc) pretend
+	 *    it's 1280x720.
+	 *    Wayland does the same, but there odd scaling factors (like 125%) are
+	 *    more common (on macOS it seems to always be 200% with "Retina" displays).
+	 * (3. Both framebuffer and window coordinates are in logical points and the
+	 *    operating/windowing system scales up to physical pixels.
+	 *    Good for backwards-compatibility with applications that are not High-DPI
+	 *    aware, but blurry - I obviously don't want that)
+	 *
+	 * "Physical pixel" means that one pixel that you can draw/address in your
+	 * window corresponds to one pixel on your screen. (At least if you configured
+	 * the Desktop resolution in your operating/windowing system to the native
+	 * resolution of the display.)
+	 *
+	 * glfw has three functions related to this:
+	 * - glfwGetFramebufferSize(), which returns the window's framebuffer size
+	 *   in physical pixels
+	 * - glfwGetWindowSize(), which returns the window size in logical points
+	 * - glfwGetWindowContentScale() which returns how much content should be
+	 *   scaled, according to the operating/windowing system.
+	 *   On macOS and Wayland this is just framebuffer_size_in_pixels / window_size_in_points,
+	 *   but on Windows and X11 that ratio is always 1.0 and the content scale
+	 *   tells you by how much your user interface should be scaled up (e.g. 1.5)
+	 *
+	 * ImGui uses logical points for all sizes and coordinates and when it renders,
+	 * that is scaled by io.DisplayFramebufferScale, which is calculated by
+	 * framebuffer_size_in_pixels / window_size_in_points, so it's the x and y factor
+	 * needed to turn a logical point coordinate into a physical pixel coordinate.
+	 *
+	 * This means that on macOS and Wayland ImGui does the scaling for us (though
+	 * it benefits from some tweaking of font parameters), while on Windows and X11
+	 * we need to do the scaling ourselves by using a bigger font size and scaling
+	 * up the sizes used by the style (style.ScaleAllSizes(scale)).
+	 *
+	 * texview also lets you set your own "ImGui Scale" which is applied additionally,
+	 * in that case even on macOS/Wayland the font and style sizes are scaled up.
+	 *
+	 * All cases are handled together here, there are no explicit code-paths per
+	 * operating/windowing system, which should also make this more future-proof.
+	 */
+
+	// destroy the old font(s) before loading a new one
+	ImGuiIO& io = ImGui::GetIO();
+	io.Fonts->Clear();
+	ImGui_ImplOpenGL3_DestroyFontsTexture();
+
+	// how much should the UI be scaled, according to the operating/windowing system?
+	float xscale = 0.0f, yscale = 0.0f;
+	glfwGetWindowContentScale(window, &xscale, &yscale);
+
+	// how much of that scaling is already done by ImGui?
+	// (this is basically io.DisplayFramebufferScale, but we can't use that here
+	//  as it may not be set yet. GetImGuiDisplayScale() does the same calculation.)
+	ImVec2 imguiCoordScale = GetImGuiDisplayScale(window);
+
+	// how much scaling needs to be done "manually"?
+	float sx = xscale / imguiCoordScale.x;
+	float sy = yscale / imguiCoordScale.y;
+
+	// user-configured scaling must also be applied
+	sx *= imguiScale;
+	sy *= imguiScale;
+
+	// both the font and the style must be scaled by a single factor
+	// (usually they're the same anyway, +/- some rounding, but theoretically
+	//  devices can have different horizontal and vertical pixels-per-inch values.
+	//  I think some smartphones actually do this?)
+	float ourImguiScale = std::max(sx, sy);
+
+	ImFontConfig fontCfg = {};
+	strcpy(fontCfg.Name, "ProggyVector");
+	float fontSize = 16.0f * ourImguiScale;
+	// RasterizerDensity allows increasing the font "density" without changing
+	// its logical size. Increasing it by the scale ImGui already applies
+	// compensates for ImGui loading the font with a *logical* size (in points)
+	// and then scaling it up to the physical size for rendering.
+	// ("Should" because the fontsize passed to ImGui is rounded to integer and
+	//  then ImGui applies the RasterizerDensity when loading so it might not be
+	//  loaded as an integer size after all, which might make it look less perfect
+	//  than it could. But this usually looks pretty good, and e.g. 125% scaling
+	//  should be fine as 1.25 * 16 = 20, same for any multiples of 1/16 = 0.0625)
+	fontCfg.RasterizerDensity = std::max(imguiCoordScale.x, imguiCoordScale.y);
+	float fontSizeInt = std::max(1.0f, roundf(fontSize)); // font sizes are supposed to be rounded to integers (and > 0)
+	io.Fonts->AddFontFromMemoryCompressedTTF(ProggyVector_compressed_data, ProggyVector_compressed_size, fontSizeInt, &fontCfg);
+
+	// ScaleAllSizes() does exactly that, so calling it twice would scale the sizes twice..
+	// so first reset the style so it has its default sizes, that are then scaled
+	// (only!) by ourImguiScale
+	SetImGuiStyle();
+	ImGui::GetStyle().ScaleAllSizes(ourImguiScale);
+}
+
 static void ImGuiFrame(GLFWwindow* window)
 {
+	// I think right before a new imgui frame is the safest place to
+	// update (reload) the font (which is done on start and if scaling changes)
+	if(updateFont) {
+		UpdateFontsAndScaling(window);
+		updateFont = false;
+	}
+
 	// Start the Dear ImGui frame
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
@@ -1400,9 +1569,9 @@ static void myGLFWkeyfun(GLFWwindow* window, int key, int scancode, int action, 
 	}
 }
 
-void myGLFWwindowcontentscalefun(GLFWwindow* window, float xscale, float yscale)
+static void myGLFWwindowcontentscalefun(GLFWwindow* window, float xscale, float yscale)
 {
-	ImGui::GetIO().FontGlobalScale = std::max(xscale, yscale);
+	updateFont = true;
 }
 
 /*
@@ -1553,28 +1722,23 @@ int main(int argc, char** argv)
 	ImGuiIO& io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
 
-	// Setup Dear ImGui style
-	ImGui::StyleColorsDark();
-	// make it look a bit nicer with rounded edges
-	ImGuiStyle& style = ImGui::GetStyle();
-	style.WindowRounding = 2.0f;
-	style.FrameRounding = 3.0f;
-	style.FramePadding = ImVec2( 6.0f, 3.0f );
-	//style.ChildRounding = 6.0f;
-	style.ScrollbarRounding = 8.0f;
-	style.GrabRounding = 3.0f;
-	style.PopupRounding = 2.0f;
+	defaultStyle = ImGui::GetStyle(); // get default unscaled style
+	SetImGuiStyle();
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplGlfw_InitForOpenGL(glfwWindow, true);
 	ImGui_ImplOpenGL3_Init(glsl_version);
 
 	{
+		// according to https://github.com/glfw/glfw/issues/1968 polling events
+		// before getting the window scale works around issues on macOS
+		glfwPollEvents();
 		float xscale = 1.0f;
 		float yscale = 1.0f;
 		glfwGetWindowContentScale(glfwWindow, &xscale, &yscale);
 		myGLFWwindowcontentscalefun(glfwWindow, xscale, yscale);
 		glfwSetWindowContentScaleCallback(glfwWindow, myGLFWwindowcontentscalefun);
+		updateFont = true; // make sure font is loaded
 	}
 
 	while (!glfwWindowShouldClose(glfwWindow)) {
