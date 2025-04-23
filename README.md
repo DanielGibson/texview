@@ -29,8 +29,8 @@ for example "texview-win64-120eeaa".
 **Goals:**
 
 - [x] Support at least Windows and Linux (and probably similar Unix-likes)
-    - [ ] maybe Mac if someone with a Mac takes care of that.
-      - for this I'd have to use an OpenGL core context, which may generally be a good idea
+    - [x] maybe Mac if someone with a Mac takes care of that.
+      - [x] for this I'd have to use an OpenGL core context, which may generally be a good idea
 - [x] Self-contained executable using OpenGL, [Dear ImGui](https://github.com/ocornut/imgui),
       [GLFW3](https://www.glfw.org/), [Native File Dialog Extended](https://github.com/btzy/nativefiledialog-extended/),
       [libktx](https://github.com/KhronosGroup/KTX-Software/) and [stb_image.h](https://github.com/nothings/stb/blob/master/stb_image.h).  
@@ -76,7 +76,8 @@ for example "texview-win64-120eeaa".
 
 * Support rendering the texture on a 3D object (cube, sphere, ...) maybe with additional textures (normalmap, ...)
   and moveable light and camera
-    - Allow customizing shader code for that (feasible with OpenGL as it takes GLSL directly)
+    - [x] Allow customizing shader code for that (feasible with OpenGL as it takes GLSL directly)  
+      *(At least the fragmentshader GLSL code can already be modified by the user)*
 * Diffing images (e.g. to show differences between source image and compressed texture)
 
 
