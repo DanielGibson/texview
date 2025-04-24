@@ -920,6 +920,9 @@ static void GenericFrame(GLFWwindow* window)
 
 	float xOffs = imguiMenuCollapsed ? 0.0f : imguiMenuWidth * imguiCoordScale.x;
 	float winW = display_w - xOffs;
+	if(winW <= 0.0f) { // most probably very high imgui scale
+		return;
+	}
 
 	glUseProgram(shaderProgram);
 
@@ -1116,6 +1119,7 @@ static void DrawSidebar(GLFWwindow* window)
 
 	ImGuiWindowFlags flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
 	if(ImGui::Begin("##options", NULL, flags)) {
+		const ImGuiStyle& style = ImGui::GetStyle();
 		if(ImGui::Button("Open File")) {
 			OpenFilePicker();
 		}
@@ -1127,7 +1131,7 @@ static void DrawSidebar(GLFWwindow* window)
 		bool texHasAlpha = (curTex.textureFlags & texview::TF_HAS_ALPHA) != 0;
 		bool texIsSRGB = (curTex.textureFlags & texview::TF_SRGB) != 0;
 
-		float unindentWidth = ImGui::GetStyle().FramePadding.x;
+		float unindentWidth = style.FramePadding.x;
 		// move the treenode arrow a bit to the left to waste less space
 		ImGui::Unindent(unindentWidth);
 		if(ImGui::TreeNode("Texture Info")) { // ImGuiTreeNodeFlags_SpanFullWidth ?
@@ -1314,11 +1318,13 @@ static void DrawSidebar(GLFWwindow* window)
 		}
 		ImGui::Dummy(ImVec2(8, 32));
 
-		ImGui::PushItemWidth(ImGui::CalcTextSize("100.125").x);
-		ImGui::InputFloat("ImGui Scale", &imguiScale);
+		ImGui::PushItemWidth( ImGui::CalcTextSize("10.0625+-").x
+		                      + (ImGui::GetFrameHeight() + style.ItemInnerSpacing.x) * 2.0f );
+		ImGui::InputFloat("UI Scale", &imguiScale, 0.0625f, 0.25f, "%.4f");
 		if(ImGui::IsItemDeactivatedAfterEdit()) {
 			updateFont = true;
 		}
+		ImGui::SetItemTooltip("Adjust the size of the UI (like this sidebar)");
 
 #if 0 // for debugging scaling issues
 		{
