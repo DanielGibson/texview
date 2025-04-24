@@ -163,7 +163,6 @@ static const char* fragShaderEnd =  R"(
  OutColor = c;
 }
 )";
-//"\n}\n";
 
 static GLuint
 CompileShader(GLenum shaderType, std::initializer_list<const char*> shaderSources)
@@ -205,11 +204,11 @@ CompileShader(GLenum shaderType, std::initializer_list<const char*> shaderSource
 			*/
 		}
 		LogError("Compiling %s Shader failed: %s\n", shaderTypeStr, bufPtr);
-		LogPrint("Source BEGIN\n"); // FIXME: log without timestamp etc
+		LogPrint("Source BEGIN\n");
 		for(const char* part : shaderSources) {
-			LogPrint("%s", part); // FIXME: log without timestamp etc
+			LogPrint("%s", part);
 		}
-		LogPrint("\nSource END\n"); // FIXME: log without timestamp etc
+		LogPrint("\nSource END\n");
 		LogError("Compiling %s Shader failed!\n", shaderTypeStr); // short version for warning overlay
 		glDeleteShader(shader);
 
@@ -1075,9 +1074,11 @@ static void DrawGLSLeditWindow(GLFWwindow* window)
 		ImGui::TextDisabled(" OutColor = c;");
 		ImGui::Spacing();
 
+		bool haveFocus = ImGui::IsWindowFocused();
+
 		float buttonWidth = ImGui::CalcTextSize("Close or what").x;
-		if(ImGui::Button("Apply", ImVec2(buttonWidth, 0.0f))
-		   || ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_Enter)) {
+		if( ImGui::Button("Apply", ImVec2(buttonWidth, 0.0f))
+		   || (haveFocus && ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_Enter)) ) {
 			UpdateShaders();
 		}
 		ImGui::SetItemTooltip("Alternatively you can press Ctrl+Enter to apply");
@@ -1085,7 +1086,8 @@ static void DrawGLSLeditWindow(GLFWwindow* window)
 		ImGui::SameLine();
 		float buttonOffset = (ImGui::GetWindowWidth() - buttonWidth - 8.0f - ImGui::GetStyle().WindowPadding.x);
 		ImGui::SetCursorPosX(buttonOffset);
-		if(ImGui::Button("Close", ImVec2(buttonWidth, 0.0f)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+		if( ImGui::Button("Close", ImVec2(buttonWidth, 0.0f))
+		    || (haveFocus && ImGui::IsKeyPressed(ImGuiKey_Escape)) ) {
 			showGLSLeditWindow = false;
 		}
 	}
@@ -1353,6 +1355,10 @@ static void SetImGuiStyle()
 	style.PopupRounding = 2.0f;
 }
 
+namespace texview {
+extern float imguiFontScale;
+}
+
 static void UpdateFontsAndScaling(GLFWwindow* window)
 {
 	/* This here is about scaling sizes of ImGui fonts and styling parameters,
@@ -1436,6 +1442,7 @@ static void UpdateFontsAndScaling(GLFWwindow* window)
 	//  devices can have different horizontal and vertical pixels-per-inch values.
 	//  I think some smartphones actually do this?)
 	float ourImguiScale = std::max(sx, sy);
+	texview::imguiFontScale = ourImguiScale;
 
 	ImFontConfig fontCfg = {};
 	strcpy(fontCfg.Name, "ProggyVector");
