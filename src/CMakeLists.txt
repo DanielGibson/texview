@@ -110,6 +110,7 @@ else()
 endif()
 
 set (texview_src
+	logging.cpp
 	main.cpp
 	texload.cpp
 	texview.h)

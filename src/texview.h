@@ -12,12 +12,13 @@
 #include <utility>
 #include <vector>
 
+#include <imgui.h> // only for IM_FMTARGS(), TBH
+
 #ifdef _MSC_VER
 	#include <intrin.h>
 #endif
 
-// TODO: could have an error printing function that also shows message through ImGui (if that is running)
-#define errprintf(...) fprintf(stderr, __VA_ARGS__)
+#define errprintf(...) texview::LogError(__VA_ARGS__)
 
 struct ktxTexture;
 
@@ -273,6 +274,22 @@ private:
 	bool UploadTexture2D(uint32_t target, int internalFormat, int level, bool isCompressed, const Texture::MipLevel& mipLevel);
 	bool UploadTexture3Dslice(uint32_t target, int internalFormat, int level, int elemIdx, bool isCompressed, const Texture::MipLevel& mipLevel);
 };
+
+
+extern void LogWindowShow();
+extern void LogWindowHide();
+extern bool LogWindowIsShown();
+extern void DrawLogWindow();
+extern void LogImGuiInit();
+
+extern void LogInfo(const char* fmt, ...) IM_FMTARGS(1);
+extern void LogWarn(const char* fmt, ...) IM_FMTARGS(1);
+extern void LogError(const char* fmt, ...) IM_FMTARGS(1);
+// to log additional lines without timestamp or "[Error]"
+extern void LogPrint(const char* fmt, ...) IM_FMTARGS(1);
+
+extern void StringAppendFormatted(std::string& str, const char* fmt, ...)  IM_FMTARGS(2);
+extern void StringAppendFormattedV(std::string& str, const char* fmt, va_list args) IM_FMTLIST(2);
 
 } //namespace texview
 

@@ -30,6 +30,8 @@
 #include "data/texview_icon32.h"
 #include "data/proggyvector_font.h"
 
+using namespace texview;
+
 // a wrapper around glVertexAttribPointer() to stay sane
 // (caller doesn't have to cast to GLintptr and then void*)
 static inline void
@@ -95,25 +97,6 @@ static int numTiles[2] = {2, 2};
 static void glfw_error_callback(int error, const char* description)
 {
 	errprintf("GLFW Error: %d - %s\n", error, description);
-}
-
-#ifdef __GNUC__
-static void AppendFormatted(std::string& str, const char* fmt, ...)
-__attribute__((format(printf, 2, 3)));
-// NOTE: For some reason, MSVC only supports printf-format checking for
-//       their own functions, not for user-defined ones -_-
-#endif
-
-static void AppendFormatted(std::string& str, const char* fmt, ...)
-{
-	va_list ap;
-	char buf[2048];
-
-	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap);
-	va_end(ap);
-
-	str += buf;
 }
 
 static void ZoomFitToWindow(GLFWwindow* window, float tw, float th, bool isCube)
@@ -202,7 +185,7 @@ CompileShader(GLenum shaderType, std::initializer_list<const char*> shaderSource
 			if(bufPtr == NULL) {
 				bufPtr = buf;
 				bufLen = sizeof(buf);
-				errprintf("WARN: In CompileShader(), malloc(%d) failed!\n", infoLogLength+1);
+				LogWarn("In CompileShader(), malloc(%d) failed!\n", infoLogLength+1);
 			}
 		}
 
@@ -221,12 +204,13 @@ CompileShader(GLenum shaderType, std::initializer_list<const char*> shaderSource
 			case GL_TESS_EVALUATION_SHADER: shaderTypeStr = "TessEvaluation"; break;
 			*/
 		}
-		errprintf("ERROR: Compiling %s Shader failed: %s\n", shaderTypeStr, bufPtr);
-		errprintf("Source BEGIN\n");
+		LogError("Compiling %s Shader failed: %s\n", shaderTypeStr, bufPtr);
+		LogPrint("Source BEGIN\n"); // FIXME: log without timestamp etc
 		for(const char* part : shaderSources) {
-			errprintf("%s", part);
+			LogPrint("%s", part); // FIXME: log without timestamp etc
 		}
-		errprintf("\nSource END\n");
+		LogPrint("\nSource END\n"); // FIXME: log without timestamp etc
+		LogError("Compiling %s Shader failed!\n", shaderTypeStr); // short version for warning overlay
 		glDeleteShader(shader);
 
 		if(bufPtr != buf) {
@@ -244,7 +228,7 @@ CreateShaderProgram(const GLuint shaders[2])
 {
 	GLuint prog = glCreateProgram();
 	if(prog == 0) {
-		errprintf("ERROR: Couldn't create a new Shader Program!\n");
+		LogError("ERROR: Couldn't create a new Shader Program!\n");
 		return 0;
 	}
 
@@ -270,13 +254,13 @@ CreateShaderProgram(const GLuint shaders[2])
 			if(bufPtr == NULL) {
 				bufPtr = buf;
 				bufLen = sizeof(buf);
-				errprintf("WARN: In CreateShaderProgram(), malloc(%d) failed!\n", infoLogLength+1);
+				LogError("WARN: In CreateShaderProgram(), malloc(%d) failed!\n", infoLogLength+1);
 			}
 		}
 
 		glGetProgramInfoLog(prog, bufLen, NULL, bufPtr);
 
-		errprintf("ERROR: Linking shader program failed: %s\n", bufPtr);
+		LogError("ERROR: Linking shader program failed: %s\n", bufPtr);
 
 		glDeleteProgram(prog);
 
@@ -333,7 +317,7 @@ static void SetSwizzleFromSimple()
 				errprintf("Invalid character '%c' in swizzle!\n", simpleSwizzle[i]);
 		}
 	}
-	AppendFormatted(swizzle, "c = vec4(%s, %s, %s, %s);\n", args[0], args[1], args[2], args[3]);
+	StringAppendFormatted(swizzle, "c = vec4(%s, %s, %s, %s);\n", args[0], args[1], args[2], args[3]);
 }
 
 static bool UpdateShaders()
@@ -381,7 +365,7 @@ static bool UpdateShaders()
 	texSampleAndNormalize.clear();
 
 	if(isIntTexture) {
-		AppendFormatted(texSampleAndNormalize, " %svec4 v;\n", typePrefix);
+		StringAppendFormatted(texSampleAndNormalize, " %svec4 v;\n", typePrefix);
 		/* ivec4 v; // or uvec4
 		 * if(mipLevel < 0.0)
 		 *     v = texture( tex0, texCoord.st ); // or maybe .stp or .stpq
@@ -391,14 +375,14 @@ static bool UpdateShaders()
 		 * vec4 c = vec4(4) / 127.0; // or other divisor depending on integer type
 		 */
 
-		AppendFormatted(texSampleAndNormalize, " if(mipLevel < 0.0)\n"
+		StringAppendFormatted(texSampleAndNormalize, " if(mipLevel < 0.0)\n"
 		                "	v = texture(tex0, texCoord.%.*s);\n",
 		                numTexCoords, "stpq");
-		AppendFormatted(texSampleAndNormalize, " else\n"
+		StringAppendFormatted(texSampleAndNormalize, " else\n"
 		                "	v = textureLod(tex0, texCoord.%.*s, mipLevel);\n",
 		                numTexCoords, "stpq");
 		// integer textures (GL_RGB_INTEGER etc) need normalization to display something useful
-		AppendFormatted(texSampleAndNormalize, "\n vec4 c = vec4(v) / %s;\n", normDiv);
+		StringAppendFormatted(texSampleAndNormalize, "\n vec4 c = vec4(v) / %s;\n", normDiv);
 	} else {
 		/* vec4 c;
 		 * if(mipLevel < 0.0)
@@ -407,11 +391,11 @@ static bool UpdateShaders()
 		 *     c = textureLod( tex0, texCoord.stp, mipLevel );
 		 */
 		// normal textures don't need normalization, so assign to vec4 c directly
-		AppendFormatted(texSampleAndNormalize, " vec4 c;\n");
-		AppendFormatted(texSampleAndNormalize, " if(mipLevel < 0.0)\n"
+		StringAppendFormatted(texSampleAndNormalize, " vec4 c;\n");
+		StringAppendFormatted(texSampleAndNormalize, " if(mipLevel < 0.0)\n"
 		                "	c = texture(tex0, texCoord.%.*s);\n",
 		                numTexCoords, "stpq");
-		AppendFormatted(texSampleAndNormalize, " else\n"
+		StringAppendFormatted(texSampleAndNormalize, " else\n"
 		                "	c = textureLod(tex0, texCoord.%.*s, mipLevel);\n",
 		                numTexCoords, "stpq");
 	}
@@ -1310,6 +1294,9 @@ static void DrawSidebar(GLFWwindow* window)
 			updateFont = true;
 		}
 		ImGui::SetItemTooltip("Adjust the size of the UI (like this sidebar)");
+		if(ImGui::Button("Show Log Window")) {
+			texview::LogWindowShow();
+		}
 
 #if 0 // for debugging scaling issues
 		{
@@ -1483,6 +1470,8 @@ static void ImGuiFrame(GLFWwindow* window)
 
 	DrawSidebar(window);
 
+	texview::DrawLogWindow(); // whether it should be shown is handled there (logging.cpp)
+
 	// NOTE: ImGui::GetMouseDragDelta() is not very useful here, because
 	//       I only want drags that start outside of ImGui windows
 	bool mouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
@@ -1635,6 +1624,7 @@ GLDebugCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei 
 	errprintf("GLDBG %s %s %s: %s\n", sourceStr, typeStr, severityStr, message);
 }
 
+
 #ifdef _WIN32
 int my_main(int argc, char** argv) // called from WinMain() in sys_win.cpp
 #else
@@ -1696,7 +1686,7 @@ int main(int argc, char** argv)
 		} else if(!haveDebugContext) {
 			errprintf( "You set the TEXVIEW_GLDEBUG environment variable, but GLFW didn't give us a debug context (for whatever reason)!\n" );
 		} else {
-			errprintf( "You set the TEXVIEW_GLDEBUG environment variable, enabling OpenGL debug logging\n" );
+			texview::LogInfo( "You set the TEXVIEW_GLDEBUG environment variable, enabling OpenGL debug logging\n" );
 			glDebugMessageCallbackARB(GLDebugCallback, NULL);
 			glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB);
 		}
@@ -1718,10 +1708,6 @@ int main(int argc, char** argv)
 	glfwSetScrollCallback(glfwWindow, myGLFWscrollfun);
 	glfwSetKeyCallback(glfwWindow, myGLFWkeyfun);
 
-	if(argc > 1) {
-		LoadTexture(argv[1]);
-	}
-
 	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -1735,6 +1721,8 @@ int main(int argc, char** argv)
 	ImGui_ImplGlfw_InitForOpenGL(glfwWindow, true);
 	ImGui_ImplOpenGL3_Init(glsl_version);
 
+	texview::LogImGuiInit();
+
 	{
 		// according to https://github.com/glfw/glfw/issues/1968 polling events
 		// before getting the window scale works around issues on macOS
@@ -1745,6 +1733,11 @@ int main(int argc, char** argv)
 		myGLFWwindowcontentscalefun(glfwWindow, xscale, yscale);
 		glfwSetWindowContentScaleCallback(glfwWindow, myGLFWwindowcontentscalefun);
 		updateFont = true; // make sure font is loaded
+	}
+
+	// load texture once everything is set up, so if errors happen they can be displayed
+	if(argc > 1) {
+		LoadTexture(argv[1]);
 	}
 
 	while (!glfwWindowShouldClose(glfwWindow)) {
