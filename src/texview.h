@@ -275,6 +275,11 @@ private:
 	bool UploadTexture3Dslice(uint32_t target, int internalFormat, int level, int elemIdx, bool isCompressed, const Texture::MipLevel& mipLevel);
 };
 
+enum LogLevel {
+	LL_INFO,
+	LL_WARN,
+	LL_ERROR
+};
 
 extern void LogWindowShow();
 extern void LogWindowHide();
