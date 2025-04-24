@@ -17,7 +17,11 @@
 
 namespace texview {
 
-void ShowWarningOverlay( const char* text );
+// how much we scale the font used by ImGui (*not* including the scaling ImGui
+// does automatically, if any) - for UpdateWarningOverlay()
+float imguiFontScale = 1.0f;
+
+void ShowWarningOverlay( const char* text, bool isError );
 
 // Usage:
 //  static ExampleAppLog my_log;
@@ -101,6 +105,12 @@ struct TexviewAppLog
 		Filter.Draw("Filter", -100.0f);
 
 		ImGui::Separator();
+
+		// DG: allow closing with Escape
+		if(p_open != nullptr && ImGui::IsWindowFocused()
+		   && ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+			*p_open = false;
+		}
 
 		// DG: no horizontal scrolling
 		if (ImGui::BeginChild("scrolling", ImVec2(0, 0), ImGuiChildFlags_None, 0)) // ImGuiWindowFlags_HorizontalScrollbar
@@ -221,7 +231,7 @@ bool LogWindowIsShown() {
 	return showLogWindow;
 }
 
-static void LogImpl(const char* level, const char* fmt, va_list args)
+static void LogImpl(LogLevel logLevel, const char* fmt, va_list args)
 {
 	time_t nowT = time(nullptr);
 	struct tm now = {};
@@ -233,7 +243,10 @@ static void LogImpl(const char* level, const char* fmt, va_list args)
 	char timestamp[10] = {};
 	strftime(timestamp, sizeof(timestamp), "%H:%M:%S ", &now);
 	std::string logLine = timestamp;
-	StringAppendFormatted(logLine, "[%s] ", level);
+
+	const char* logLevelStrings[] = { "[INFO] ", "[WARN] ", "[ERROR] " };
+	logLine += logLevelStrings[logLevel];
+
 	size_t msgStartOffset = logLine.size();
 	StringAppendFormattedV(logLine, fmt, args);
 
@@ -244,10 +257,10 @@ static void LogImpl(const char* level, const char* fmt, va_list args)
 
 	// TODO: log to file?
 
-	// if it's a warning or error (level not "Info")
-	// show message in warning overlay
-	if(imguiInitialized && level[0] != 'I') {
-		ShowWarningOverlay(logLine.c_str() + msgStartOffset); // don't show timestamp or [Error]
+	// if it's a warning or error show message in warning overlay
+	if(imguiInitialized && logLevel > LL_INFO) {
+		// don't show timestamp or [Error]
+		ShowWarningOverlay(logLine.c_str() + msgStartOffset, logLevel == LL_ERROR);
 	}
 }
 
@@ -266,71 +279,70 @@ void LogPrint(const char* fmt, ...) {
 void LogError(const char* fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	LogImpl("Error", fmt, args);
+	LogImpl(LL_ERROR, fmt, args);
 	va_end(args);
 }
 
 void LogWarn(const char* fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	LogImpl("Warn", fmt, args);
+	LogImpl(LL_WARN, fmt, args);
 	va_end(args);
 }
 
 void LogInfo(const char* fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	LogImpl("Info", fmt, args);
+	LogImpl(LL_INFO, fmt, args);
 	va_end(args);
 }
 
 
-static std::string warningOverlayText = "Bla blub whatever!";
+static std::string warningOverlayText;
 static double warningOverlayStartTime = -100.0;
-static ImVec2 warningOverlayStartPos;
-static int warningOverlayRequested = 0;
+static bool warningOverlayRequested = 0;
+static bool warningOverlayForError = false;
 
 static void UpdateWarningOverlay()
 {
 	if(warningOverlayRequested) {
 		// can't initialize these things in ShowWarningOverlay(), because that
-		// may be called in the same frame the filepicker was closed, so
-		// 1. ImGui's reported mouse position is probably wrong/outdated
-		// 2. while the filepicker is open, texview (and thus ImGui) isn't updated
-		//    so ImGui::GetTime() (which is a cached value) is outdated at least by seconds
-		warningOverlayRequested--;
+		// may be called in the same frame the filepicker was closed, and while
+		// the filepicker is open, texview (and thus ImGui) isn't updated,
+		// so ImGui::GetTime() (which is a cached value) is outdated at least by seconds
+		warningOverlayRequested = false;
 		warningOverlayStartTime = ImGui::GetTime();
-		warningOverlayStartPos = ImGui::GetMousePos();
 	} else if(warningOverlayStartTime < 0.0) {
 		return;
 	}
-	//bool hadKeyDownEvent = false; // TODO get this somehow, and also make sure it's not the event that caused this warning? or just support Esc?
-	bool hadKeyDownEvent = ImGui::IsKeyPressed(ImGuiKey_Escape) || ImGui::IsMouseClicked(ImGuiMouseButton_Left);
 
-	if ( hadKeyDownEvent || ImGui::GetTime() - warningOverlayStartTime > 4.0f ) {
-		warningOverlayStartTime = -100.0f;
-		return;
+	double dt = ImGui::GetTime() - warningOverlayStartTime;
+	if(dt > 0.2) { // only close this window after user input after showing it for some time
+		bool close = ImGui::IsKeyPressed(ImGuiKey_Escape) || ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+		bool openLogWindow = ImGui::IsKeyPressed(ImGuiKey_Enter);
+
+		if ( close || openLogWindow || dt > 10.0f ) {
+			warningOverlayStartTime = -100.0f;
+			if(openLogWindow) {
+				LogWindowShow();
+			}
+			return;
+		}
 	}
 
-	// also hide if a key was pressed or maybe even if the mouse was moved (too much)
-	//ImVec2 mdv = ImGui::GetMousePos() - warningOverlayStartPos; // Mouse Delta Vector
-	const float fontSize = ImGui::GetFontSize();
-#if 0
+	ImVec4 bgColor = warningOverlayForError ? ImVec4(0.8f, 0.4f, 0.4f, 0.85f)
+	                                        : ImVec4(1.0f, 1.0f, 0.4f, 0.85f);
 
-	//float mouseDelta = sqrtf( mdv.x * mdv.x + mdv.y * mdv.y );
-	if ( mouseDelta > fontSize * 4.0f || hadKeyDownEvent ) {
-		//printf("# mousedelta: %f, keydown: %d\n", mouseDelta, (int)hadKeyDownEvent);
-		warningOverlayStartTime = -100.0f;
-		return;
-	}
-#endif
+	ImVec4 textColor = warningOverlayForError ? ImVec4(1,1,1,1) : ImVec4(0,0,0,1);
+	ImGui::PushStyleColor(ImGuiCol_WindowBg, bgColor);
+	ImGui::PushStyleColor(ImGuiCol_Text, textColor);
 
 	ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-	ImGui::PushStyleColor( ImGuiCol_WindowBg, ImVec4(1.0f, 0.4f, 0.4f, 0.6f) );
+	const float fontSize = ImGui::GetFontSize();
 	float padSize = fontSize * 2.0f;
 	ImGui::PushStyleVar( ImGuiStyleVar_WindowPadding, ImVec2(padSize, padSize) );
 
-	int winFlags = ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove
+	int winFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove
 			| ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize;
 	ImGui::Begin("WarningOverlay", NULL, winFlags);
 
@@ -341,47 +353,50 @@ static void UpdateWarningOverlay()
 		{20, 33} // dot
 	};
 
-	float iconScale = 1.0f; // TODO: global scale also used for fontsize
+	float iconScale = imguiFontScale;
 
 	ImVec2 offset = ImGui::GetWindowPos() + ImVec2(fontSize, fontSize);
-	for ( ImVec2& v : points ) {
-		v.x = roundf( v.x * iconScale );
-		v.y = roundf( v.y * iconScale );
+	for(ImVec2& v : points) {
+		v.x = roundf(v.x * iconScale);
+		v.y = roundf(v.y * iconScale);
 		v += offset;
 	}
 
 	ImU32 color = ImGui::GetColorU32( ImVec4(0.1f, 0.1f, 0.1f, 1.0f) );
 
-	drawList->AddTriangle( points[0], points[1], points[2], color, roundf( iconScale * 4.0f ) );
+	drawList->AddTriangle(points[0], points[1], points[2], color, roundf(iconScale * 4.0f));
 
-	drawList->AddPolyline( points+3, 2, color, 0, roundf( iconScale * 3.0f ) );
+	drawList->AddPolyline(points+3, 2, color, 0, roundf(iconScale * 3.0f));
 
 	float dotRadius = 2.0f * iconScale;
-	drawList->AddEllipseFilled( points[5], ImVec2(dotRadius, dotRadius), color, 0, 6 );
+	drawList->AddEllipseFilled(points[5], ImVec2(dotRadius, dotRadius), color, 0, 6);
 
-	ImGui::Indent( 40.0f * iconScale );
-	ImGui::TextUnformatted( warningOverlayText.c_str() );
-
+	ImGui::Indent(40.0f * iconScale);
+	ImGui::TextUnformatted(warningOverlayText.c_str());
+	ImGui::Spacing();
+	ImGui::TextUnformatted("See Log Window for details.");
+	ImGui::TextUnformatted("Press Enter to open Log Window,\npress Escape or click to close this message");
 	ImGui::End();
 
 	ImGui::PopStyleVar(); // WindowPadding
+	ImGui::PopStyleColor(); // Text
 	ImGui::PopStyleColor(); // WindowBg
 }
 
-void ShowWarningOverlay( const char* text )
+void ShowWarningOverlay( const char* text, bool isError )
 {
-	//printf("XX ShowWarningOverlay('%s')\n", text);
-	warningOverlayText = text;
-	warningOverlayRequested = 10;
-	//warningOverlayStartTime = ImGui::GetTime();
-	// FIXME: probably mousepos is bullshit if we're in the filepicker
-	//warningOverlayStartPos = ImGui::GetMousePos();
+	// void replacing an active error message with a warning
+	if(isError || warningOverlayStartTime < 0.0) {
+		warningOverlayText = text;
+		warningOverlayRequested = 1;
+		warningOverlayForError = isError;
+	}
 }
 
 void DrawLogWindow() {
 	UpdateWarningOverlay();
 	if(showLogWindow) {
-#if 01 // just for testing..
+#if 0 // just for testing..
 		ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_FirstUseEver);
 		ImGui::Begin("Log Messages", &showLogWindow);
 
