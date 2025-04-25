@@ -1639,6 +1639,12 @@ int main(int argc, char** argv)
 #endif
 {
 	int ret = 0;
+	static std::string imguiIniPath;
+	imguiIniPath = texview::GetSettingsDir();
+	// make sure the settings directory exists so imgui.ini and maybe logs
+	// can be written there
+	texview::CreatePathRecursive(&imguiIniPath.front());
+
 	glfwSetErrorCallback(glfw_error_callback);
 	if (!glfwInit()) {
 		errprintf("glfwInit() failed! Exiting..\n");
@@ -1720,6 +1726,10 @@ int main(int argc, char** argv)
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+
+
+	imguiIniPath += "/imgui.ini";
+	io.IniFilename = imguiIniPath.c_str();
 
 	defaultStyle = ImGui::GetStyle(); // get default unscaled style
 	SetImGuiStyle();
