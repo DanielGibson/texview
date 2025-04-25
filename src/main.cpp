@@ -30,9 +30,7 @@
 #include "data/texview_icon32.h"
 #include "data/proggyvector_font.h"
 
-#ifdef __APPLE__
-	#include <ApplicationServices/ApplicationServices.h>
-#endif
+using namespace texview;
 
 // a wrapper around glVertexAttribPointer() to stay sane
 // (caller doesn't have to cast to GLintptr and then void*)
@@ -96,38 +94,9 @@ static bool viewAtSameSize = true;
 static int spacingBetweenMips = 2;
 static int numTiles[2] = {2, 2};
 
-
-#ifdef __APPLE__
-	void GetPixelWidthHeight_OSX(int* pixelWidth, int* pixelHeight)
-	{
-		CGDirectDisplayID display = CGMainDisplayID();
-		*pixelWidth = CGDisplayPixelsWide(display);
-		*pixelHeight = CGDisplayPixelsHigh(display);
-	}
-#endif
-
 static void glfw_error_callback(int error, const char* description)
 {
 	errprintf("GLFW Error: %d - %s\n", error, description);
-}
-
-#ifdef __GNUC__
-static void AppendFormatted(std::string& str, const char* fmt, ...)
-__attribute__((format(printf, 2, 3)));
-// NOTE: For some reason, MSVC only supports printf-format checking for
-//       their own functions, not for user-defined ones -_-
-#endif
-
-static void AppendFormatted(std::string& str, const char* fmt, ...)
-{
-	va_list ap;
-	char buf[2048];
-
-	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap);
-	va_end(ap);
-
-	str += buf;
 }
 
 static void ZoomFitToWindow(GLFWwindow* window, float tw, float th, bool isCube)
@@ -194,7 +163,6 @@ static const char* fragShaderEnd =  R"(
  OutColor = c;
 }
 )";
-//"\n}\n";
 
 static GLuint
 CompileShader(GLenum shaderType, std::initializer_list<const char*> shaderSources)
@@ -216,7 +184,7 @@ CompileShader(GLenum shaderType, std::initializer_list<const char*> shaderSource
 			if(bufPtr == NULL) {
 				bufPtr = buf;
 				bufLen = sizeof(buf);
-				errprintf("WARN: In CompileShader(), malloc(%d) failed!\n", infoLogLength+1);
+				LogWarn("In CompileShader(), malloc(%d) failed!\n", infoLogLength+1);
 			}
 		}
 
@@ -235,12 +203,13 @@ CompileShader(GLenum shaderType, std::initializer_list<const char*> shaderSource
 			case GL_TESS_EVALUATION_SHADER: shaderTypeStr = "TessEvaluation"; break;
 			*/
 		}
-		errprintf("ERROR: Compiling %s Shader failed: %s\n", shaderTypeStr, bufPtr);
-		errprintf("Source BEGIN\n");
+		LogError("Compiling %s Shader failed: %s\n", shaderTypeStr, bufPtr);
+		LogPrint("Source BEGIN\n");
 		for(const char* part : shaderSources) {
-			errprintf("%s", part);
+			LogPrint("%s", part);
 		}
-		errprintf("\nSource END\n");
+		LogPrint("\nSource END\n");
+		LogError("Compiling %s Shader failed!\n", shaderTypeStr); // short version for warning overlay
 		glDeleteShader(shader);
 
 		if(bufPtr != buf) {
@@ -258,7 +227,7 @@ CreateShaderProgram(const GLuint shaders[2])
 {
 	GLuint prog = glCreateProgram();
 	if(prog == 0) {
-		errprintf("ERROR: Couldn't create a new Shader Program!\n");
+		LogError("ERROR: Couldn't create a new Shader Program!\n");
 		return 0;
 	}
 
@@ -284,13 +253,13 @@ CreateShaderProgram(const GLuint shaders[2])
 			if(bufPtr == NULL) {
 				bufPtr = buf;
 				bufLen = sizeof(buf);
-				errprintf("WARN: In CreateShaderProgram(), malloc(%d) failed!\n", infoLogLength+1);
+				LogError("WARN: In CreateShaderProgram(), malloc(%d) failed!\n", infoLogLength+1);
 			}
 		}
 
 		glGetProgramInfoLog(prog, bufLen, NULL, bufPtr);
 
-		errprintf("ERROR: Linking shader program failed: %s\n", bufPtr);
+		LogError("ERROR: Linking shader program failed: %s\n", bufPtr);
 
 		glDeleteProgram(prog);
 
@@ -347,7 +316,7 @@ static void SetSwizzleFromSimple()
 				errprintf("Invalid character '%c' in swizzle!\n", simpleSwizzle[i]);
 		}
 	}
-	AppendFormatted(swizzle, "c = vec4(%s, %s, %s, %s);\n", args[0], args[1], args[2], args[3]);
+	StringAppendFormatted(swizzle, "c = vec4(%s, %s, %s, %s);\n", args[0], args[1], args[2], args[3]);
 }
 
 static bool UpdateShaders()
@@ -395,7 +364,7 @@ static bool UpdateShaders()
 	texSampleAndNormalize.clear();
 
 	if(isIntTexture) {
-		AppendFormatted(texSampleAndNormalize, " %svec4 v;\n", typePrefix);
+		StringAppendFormatted(texSampleAndNormalize, " %svec4 v;\n", typePrefix);
 		/* ivec4 v; // or uvec4
 		 * if(mipLevel < 0.0)
 		 *     v = texture( tex0, texCoord.st ); // or maybe .stp or .stpq
@@ -405,14 +374,14 @@ static bool UpdateShaders()
 		 * vec4 c = vec4(4) / 127.0; // or other divisor depending on integer type
 		 */
 
-		AppendFormatted(texSampleAndNormalize, " if(mipLevel < 0.0)\n"
+		StringAppendFormatted(texSampleAndNormalize, " if(mipLevel < 0.0)\n"
 		                "	v = texture(tex0, texCoord.%.*s);\n",
 		                numTexCoords, "stpq");
-		AppendFormatted(texSampleAndNormalize, " else\n"
+		StringAppendFormatted(texSampleAndNormalize, " else\n"
 		                "	v = textureLod(tex0, texCoord.%.*s, mipLevel);\n",
 		                numTexCoords, "stpq");
 		// integer textures (GL_RGB_INTEGER etc) need normalization to display something useful
-		AppendFormatted(texSampleAndNormalize, "\n vec4 c = vec4(v) / %s;\n", normDiv);
+		StringAppendFormatted(texSampleAndNormalize, "\n vec4 c = vec4(v) / %s;\n", normDiv);
 	} else {
 		/* vec4 c;
 		 * if(mipLevel < 0.0)
@@ -421,11 +390,11 @@ static bool UpdateShaders()
 		 *     c = textureLod( tex0, texCoord.stp, mipLevel );
 		 */
 		// normal textures don't need normalization, so assign to vec4 c directly
-		AppendFormatted(texSampleAndNormalize, " vec4 c;\n");
-		AppendFormatted(texSampleAndNormalize, " if(mipLevel < 0.0)\n"
+		StringAppendFormatted(texSampleAndNormalize, " vec4 c;\n");
+		StringAppendFormatted(texSampleAndNormalize, " if(mipLevel < 0.0)\n"
 		                "	c = texture(tex0, texCoord.%.*s);\n",
 		                numTexCoords, "stpq");
-		AppendFormatted(texSampleAndNormalize, " else\n"
+		StringAppendFormatted(texSampleAndNormalize, " else\n"
 		                "	c = textureLod(tex0, texCoord.%.*s, mipLevel);\n",
 		                numTexCoords, "stpq");
 	}
@@ -837,7 +806,6 @@ static void DrawTexture()
 			float posY = 0.0f;
 			float hOffset = texW + spacingBetweenMips;
 			float vOffset = texH + spacingBetweenMips;
-			int rowNum = 0;
 			for(int i=0; i < numMips; ++i) {
 				AddQuad(tex, i, arrayIndex, ImVec2(posX, posY), ImVec2(texW, texH));
 				if(((i+1) % numHor) == 0) {
@@ -846,7 +814,6 @@ static void DrawTexture()
 					// so the next level of the last mip of one line
 					// is right below it instead of the start of the next line
 					hOffset = -hOffset;
-					++rowNum;
 				} else {
 					posX += hOffset;
 				}
@@ -934,21 +901,12 @@ static void GenericFrame(GLFWwindow* window)
 
 	float xOffs = imguiMenuCollapsed ? 0.0f : imguiMenuWidth * imguiCoordScale.x;
 	float winW = display_w - xOffs;
+	if(winW <= 0.0f) { // most probably very high imgui scale
+		return;
+	}
 
 	glUseProgram(shaderProgram);
 
-#if 0
-	// good thing we're using a compat profile :-p
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	glViewport(xOffs, 0, winW, display_h);
-	glOrtho(0, winW, display_h, 0, -1, 1);
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
-
-	glScaled(zoomLevel, zoomLevel, 1);
-	glTranslated((transX * sx) / zoomLevel, (transY * sy) / zoomLevel, 0.0);
-#else
 	float mvp[4][4] = {};
 	glViewport(xOffs, 0, winW, display_h);
 
@@ -974,10 +932,8 @@ static void GenericFrame(GLFWwindow* window)
 		mvp[3][0] += mvp[0][0] * tx;
 		mvp[3][1] += mvp[1][1] * ty;
 	}
-	// mvp[spalte][zeile]
 
 	glUniformMatrix4fv(mvpMatrixUniform, 1, GL_FALSE, mvp[0]);
-#endif
 
 	DrawTexture();
 }
@@ -1017,6 +973,18 @@ static void OpenFilePicker() {
 		// TODO: imgui-only alternative, maybe https://github.com/aiekick/ImGuiFileDialog
 		errprintf("Built without NativeFileDialog support, have no alternative (yet)!\n");
 #endif
+}
+
+// should return the correct value even if ImGui itself hasn't updated
+// io.DisplayFramebufferScale yet
+static ImVec2 GetImGuiDisplayScale(GLFWwindow* window)
+{
+	int fbW=0, fbH=0;
+	glfwGetFramebufferSize(window, &fbW, &fbH);
+	int winW=0, winH=0;
+	glfwGetWindowSize(window, &winW, &winH);
+	// Note: io.DisplayFramebufferScale isn't set yet, so calculate the same value here..
+	return ImVec2(float(fbW)/winW, float(fbH)/winH);
 }
 
 static void DrawAboutWindow(GLFWwindow* window)
@@ -1091,9 +1059,11 @@ static void DrawGLSLeditWindow(GLFWwindow* window)
 		ImGui::TextDisabled(" OutColor = c;");
 		ImGui::Spacing();
 
+		bool haveFocus = ImGui::IsWindowFocused();
+
 		float buttonWidth = ImGui::CalcTextSize("Close or what").x;
-		if(ImGui::Button("Apply", ImVec2(buttonWidth, 0.0f))
-		   || ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_Enter)) {
+		if( ImGui::Button("Apply", ImVec2(buttonWidth, 0.0f))
+		   || (haveFocus && ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_Enter)) ) {
 			UpdateShaders();
 		}
 		ImGui::SetItemTooltip("Alternatively you can press Ctrl+Enter to apply");
@@ -1101,7 +1071,8 @@ static void DrawGLSLeditWindow(GLFWwindow* window)
 		ImGui::SameLine();
 		float buttonOffset = (ImGui::GetWindowWidth() - buttonWidth - 8.0f - ImGui::GetStyle().WindowPadding.x);
 		ImGui::SetCursorPosX(buttonOffset);
-		if(ImGui::Button("Close", ImVec2(buttonWidth, 0.0f)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+		if( ImGui::Button("Close", ImVec2(buttonWidth, 0.0f))
+		    || (haveFocus && ImGui::IsKeyPressed(ImGuiKey_Escape)) ) {
 			showGLSLeditWindow = false;
 		}
 	}
@@ -1119,6 +1090,7 @@ static void DrawSidebar(GLFWwindow* window)
 
 	ImGuiWindowFlags flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
 	if(ImGui::Begin("##options", NULL, flags)) {
+		const ImGuiStyle& style = ImGui::GetStyle();
 		if(ImGui::Button("Open File")) {
 			OpenFilePicker();
 		}
@@ -1130,7 +1102,7 @@ static void DrawSidebar(GLFWwindow* window)
 		bool texHasAlpha = (curTex.textureFlags & texview::TF_HAS_ALPHA) != 0;
 		bool texIsSRGB = (curTex.textureFlags & texview::TF_SRGB) != 0;
 
-		float unindentWidth = ImGui::GetStyle().FramePadding.x;
+		float unindentWidth = style.FramePadding.x;
 		// move the treenode arrow a bit to the left to waste less space
 		ImGui::Unindent(unindentWidth);
 		if(ImGui::TreeNode("Texture Info")) { // ImGuiTreeNodeFlags_SpanFullWidth ?
@@ -1317,29 +1289,25 @@ static void DrawSidebar(GLFWwindow* window)
 		}
 		ImGui::Dummy(ImVec2(8, 32));
 
-		ImGui::PushItemWidth(ImGui::CalcTextSize("100.125").x);
-		ImGui::InputFloat("ImGui Scale", &imguiScale);
+		ImGui::PushItemWidth( ImGui::CalcTextSize("10.0625+-").x
+		                      + (ImGui::GetFrameHeight() + style.ItemInnerSpacing.x) * 2.0f );
+		ImGui::InputFloat("UI Scale", &imguiScale, 0.0625f, 0.25f, "%.4f");
 		if(ImGui::IsItemDeactivatedAfterEdit()) {
 			updateFont = true;
 		}
+		ImGui::SetItemTooltip("Adjust the size of the UI (like this sidebar)");
+		if(ImGui::Button("Show Log Window")) {
+			texview::LogWindowShow();
+		}
 
-#if 1 // for debugging scaling issues
+#if 0 // for debugging scaling issues
 		{
 			int winW, winH;
 			int fbW, fbH;
 			float scaleX, scaleY;
-
+			glfwGetWindowSize(window, &winW, &winH);
 			glfwGetFramebufferSize(window, &fbW, &fbH);
-			
-			#ifdef __APPLE__
-				GetPixelWidthHeight_OSX(&winW, &winH);
-				scaleX = (float)fbW/(float)winW;
-				scaleY = (float)fbH/(float)winH;
-				
-			#else
-				glfwGetWindowSize(window, &winW, &winH);
-				glfwGetWindowContentScale(window, &scaleX, &scaleY);
-			#endif
+			glfwGetWindowContentScale(window, &scaleX, &scaleY);
 
 			ImGui::Text("GLFW log WinSize: %d x %d", winW, winH);
 			ImGui::Text("GLFW FB size:     %d x %d", fbW, fbH);
@@ -1372,24 +1340,125 @@ static void SetImGuiStyle()
 	style.PopupRounding = 2.0f;
 }
 
+namespace texview {
+extern float imguiFontScale;
+}
+
+static void UpdateFontsAndScaling(GLFWwindow* window)
+{
+	/* This here is about scaling sizes of ImGui fonts and styling parameters,
+	 * mostly for High-DPI (Retina, whatever) displays.
+	 * Operating systems/windowing systems handle "High-DPI" in two (3) different ways:
+	 * 1. Both the framebuffer and window coordinates (used for window size and
+	 *    mouse coordinates) are in physical pixels, just like they are in traditional
+	 *    display modes. The operating/windowing system somehow communicates how
+	 *    much the application should scale its user interface.
+	 *    This is what MS Windows and X11 do, at least in the modes used by glfw.
+	 * 2. The framebuffer is in physical pixels, but window coordinates (window size,
+	 *    mouse coordinates, ...) are in logical points that have a lower resolution.
+	 *    For example on macOS with High-DPI "Retina" displays, requesting
+	 *    a 1280x720 window gives you a window that is displayed as 2560x1440 pixels
+	 *    on your screen (and that's also the size of the framebuffer), but
+	 *    mouse coordinates (or values used for resizing the window etc) pretend
+	 *    it's 1280x720.
+	 *    Wayland does the same, but there odd scaling factors (like 125%) are
+	 *    more common (on macOS it seems to always be 200% with "Retina" displays).
+	 * (3. Both framebuffer and window coordinates are in logical points and the
+	 *    operating/windowing system scales up to physical pixels.
+	 *    Good for backwards-compatibility with applications that are not High-DPI
+	 *    aware, but blurry - I obviously don't want that)
+	 *
+	 * "Physical pixel" means that one pixel that you can draw/address in your
+	 * window corresponds to one pixel on your screen. (At least if you configured
+	 * the Desktop resolution in your operating/windowing system to the native
+	 * resolution of the display.)
+	 *
+	 * glfw has three functions related to this:
+	 * - glfwGetFramebufferSize(), which returns the window's framebuffer size
+	 *   in physical pixels
+	 * - glfwGetWindowSize(), which returns the window size in logical points
+	 * - glfwGetWindowContentScale() which returns how much content should be
+	 *   scaled, according to the operating/windowing system.
+	 *   On macOS and Wayland this is just framebuffer_size_in_pixels / window_size_in_points,
+	 *   but on Windows and X11 that ratio is always 1.0 and the content scale
+	 *   tells you by how much your user interface should be scaled up (e.g. 1.5)
+	 *
+	 * ImGui uses logical points for all sizes and coordinates and when it renders,
+	 * that is scaled by io.DisplayFramebufferScale, which is calculated by
+	 * framebuffer_size_in_pixels / window_size_in_points, so it's the x and y factor
+	 * needed to turn a logical point coordinate into a physical pixel coordinate.
+	 *
+	 * This means that on macOS and Wayland ImGui does the scaling for us (though
+	 * it benefits from some tweaking of font parameters), while on Windows and X11
+	 * we need to do the scaling ourselves by using a bigger font size and scaling
+	 * up the sizes used by the style (style.ScaleAllSizes(scale)).
+	 *
+	 * texview also lets you set your own "ImGui Scale" which is applied additionally,
+	 * in that case even on macOS/Wayland the font and style sizes are scaled up.
+	 *
+	 * All cases are handled together here, there are no explicit code-paths per
+	 * operating/windowing system, which should also make this more future-proof.
+	 */
+
+	// destroy the old font(s) before loading a new one
+	ImGuiIO& io = ImGui::GetIO();
+	io.Fonts->Clear();
+	ImGui_ImplOpenGL3_DestroyFontsTexture();
+
+	// how much should the UI be scaled, according to the operating/windowing system?
+	float xscale = 0.0f, yscale = 0.0f;
+	glfwGetWindowContentScale(window, &xscale, &yscale);
+
+	// how much of that scaling is already done by ImGui?
+	// (this is basically io.DisplayFramebufferScale, but we can't use that here
+	//  as it may not be set yet. GetImGuiDisplayScale() does the same calculation.)
+	ImVec2 imguiCoordScale = GetImGuiDisplayScale(window);
+
+	// how much scaling needs to be done "manually"?
+	float sx = xscale / imguiCoordScale.x;
+	float sy = yscale / imguiCoordScale.y;
+
+	// user-configured scaling must also be applied
+	sx *= imguiScale;
+	sy *= imguiScale;
+
+	// both the font and the style must be scaled by a single factor
+	// (usually they're the same anyway, +/- some rounding, but theoretically
+	//  devices can have different horizontal and vertical pixels-per-inch values.
+	//  I think some smartphones actually do this?)
+	float ourImguiScale = std::max(sx, sy);
+	texview::imguiFontScale = ourImguiScale;
+
+	ImFontConfig fontCfg = {};
+	strcpy(fontCfg.Name, "ProggyVector");
+	float fontSize = 16.0f * ourImguiScale;
+	// RasterizerDensity allows increasing the font "density" without changing
+	// its logical size. Increasing it by the scale ImGui already applies
+	// compensates for ImGui loading the font with a *logical* size (in points)
+	// and then scaling it up to the physical size for rendering.
+	// ("Should" because the fontsize passed to ImGui is rounded to integer and
+	//  then ImGui applies the RasterizerDensity when loading so it might not be
+	//  loaded as an integer size after all, which might make it look less perfect
+	//  than it could. But this usually looks pretty good, and e.g. 125% scaling
+	//  should be fine as 1.25 * 16 = 20, same for any multiples of 1/16 = 0.0625)
+	fontCfg.RasterizerDensity = std::max(imguiCoordScale.x, imguiCoordScale.y);
+	float fontSizeInt = std::max(1.0f, roundf(fontSize)); // font sizes are supposed to be rounded to integers (and > 0)
+	io.Fonts->AddFontFromMemoryCompressedTTF(ProggyVector_compressed_data, ProggyVector_compressed_size, fontSizeInt, &fontCfg);
+
+	// ScaleAllSizes() does exactly that, so calling it twice would scale the sizes twice..
+	// so first reset the style so it has its default sizes, that are then scaled
+	// (only!) by ourImguiScale
+	SetImGuiStyle();
+	ImGui::GetStyle().ScaleAllSizes(ourImguiScale);
+}
+
 static void ImGuiFrame(GLFWwindow* window)
 {
 	// I think right before a new imgui frame is the safest place to
-	// update (reload) the font
+	// update (reload) the font (which is done on start and if scaling changes)
 	if(updateFont) {
+		UpdateFontsAndScaling(window);
 		updateFont = false;
-		ImGuiIO& io = ImGui::GetIO();
-		io.Fonts->Clear();
-		ImGui_ImplOpenGL3_DestroyFontsTexture();
-		ImFontConfig fontCfg;
-		strcpy( fontCfg.Name, "ProggyVector" );
-		float fontSize = 16.0f * imguiScale;
-		float fontSizeInt = std::max(1.0f, roundf( fontSize )); // font sizes are supposed to be rounded to integers (and > 0)
-		io.Fonts->AddFontFromMemoryCompressedTTF(ProggyVector_compressed_data, ProggyVector_compressed_size, fontSizeInt, nullptr);
-		SetImGuiStyle();
-		if(imguiScale != 1.0f) {
-			ImGui::GetStyle().ScaleAllSizes(imguiScale);
-		}
 	}
 
 	// Start the Dear ImGui frame
@@ -1407,6 +1476,8 @@ static void ImGuiFrame(GLFWwindow* window)
 		DrawGLSLeditWindow(window);
 
 	DrawSidebar(window);
+
+	texview::DrawLogWindow(); // whether it should be shown is handled there (logging.cpp)
 
 	// NOTE: ImGui::GetMouseDragDelta() is not very useful here, because
 	//       I only want drags that start outside of ImGui windows
@@ -1502,33 +1573,7 @@ static void myGLFWkeyfun(GLFWwindow* window, int key, int scancode, int action, 
 
 static void myGLFWwindowcontentscalefun(GLFWwindow* window, float xscale, float yscale)
 {
-	float sx = 1.0;
-	float sy = 1.0;
-	// imgui already scales by framebuffersize / windowsize (io.DisplayFramebufferScale)
-	// only do additional scaling if contentscale suggests even more scaling
-	// (also handles framebuffersize == windowsize but contentscale > 1, like on highdpi KDE/X11)
-	// TODO: are there situations where we may wanna scale *down*?
-	int fbW=0, fbH=0;
-	glfwGetFramebufferSize(window, &fbW, &fbH);
-	int winW=0, winH=0;
-
-	#ifdef __APPLE__
-		GetPixelWidthHeight_OSX(&winW, &winH);
-	#else
-		glfwGetWindowSize(window, &winW, &winH);
-	#endif
-
-	// Note: io.DisplayFramebufferScale isn't set yet, so calculate the same value here..
-	ImVec2 imguiCoordScale(float(fbW)/winW, float(fbH)/winH);
-	if(xscale > imguiCoordScale.x)
-		sx = xscale / imguiCoordScale.x;
-	if(yscale > imguiCoordScale.y)
-		sy = yscale / imguiCoordScale.y;
-	float is = std::max(sx, sy);
-	if(is != imguiScale) {
-		imguiScale = is;
-		updateFont = true;
-	}
+	updateFont = true;
 }
 
 /*
@@ -1586,6 +1631,7 @@ GLDebugCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei 
 	errprintf("GLDBG %s %s %s: %s\n", sourceStr, typeStr, severityStr, message);
 }
 
+
 #ifdef _WIN32
 int my_main(int argc, char** argv) // called from WinMain() in sys_win.cpp
 #else
@@ -1593,6 +1639,12 @@ int main(int argc, char** argv)
 #endif
 {
 	int ret = 0;
+	static std::string imguiIniPath;
+	imguiIniPath = texview::GetSettingsDir();
+	// make sure the settings directory exists so imgui.ini and maybe logs
+	// can be written there
+	texview::CreatePathRecursive(&imguiIniPath.front());
+
 	glfwSetErrorCallback(glfw_error_callback);
 	if (!glfwInit()) {
 		errprintf("glfwInit() failed! Exiting..\n");
@@ -1647,7 +1699,7 @@ int main(int argc, char** argv)
 		} else if(!haveDebugContext) {
 			errprintf( "You set the TEXVIEW_GLDEBUG environment variable, but GLFW didn't give us a debug context (for whatever reason)!\n" );
 		} else {
-			errprintf( "You set the TEXVIEW_GLDEBUG environment variable, enabling OpenGL debug logging\n" );
+			texview::LogInfo( "You set the TEXVIEW_GLDEBUG environment variable, enabling OpenGL debug logging\n" );
 			glDebugMessageCallbackARB(GLDebugCallback, NULL);
 			glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB);
 		}
@@ -1669,15 +1721,15 @@ int main(int argc, char** argv)
 	glfwSetScrollCallback(glfwWindow, myGLFWscrollfun);
 	glfwSetKeyCallback(glfwWindow, myGLFWkeyfun);
 
-	if(argc > 1) {
-		LoadTexture(argv[1]);
-	}
-
 	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+
+
+	imguiIniPath += "/imgui.ini";
+	io.IniFilename = imguiIniPath.c_str();
 
 	defaultStyle = ImGui::GetStyle(); // get default unscaled style
 	SetImGuiStyle();
@@ -1685,6 +1737,8 @@ int main(int argc, char** argv)
 	// Setup Platform/Renderer backends
 	ImGui_ImplGlfw_InitForOpenGL(glfwWindow, true);
 	ImGui_ImplOpenGL3_Init(glsl_version);
+
+	texview::LogImGuiInit();
 
 	{
 		// according to https://github.com/glfw/glfw/issues/1968 polling events
@@ -1695,6 +1749,12 @@ int main(int argc, char** argv)
 		glfwGetWindowContentScale(glfwWindow, &xscale, &yscale);
 		myGLFWwindowcontentscalefun(glfwWindow, xscale, yscale);
 		glfwSetWindowContentScaleCallback(glfwWindow, myGLFWwindowcontentscalefun);
+		updateFont = true; // make sure font is loaded
+	}
+
+	// load texture once everything is set up, so if errors happen they can be displayed
+	if(argc > 1) {
+		LoadTexture(argv[1]);
 	}
 
 	while (!glfwWindowShouldClose(glfwWindow)) {
@@ -1704,17 +1764,17 @@ int main(int argc, char** argv)
 		// - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy of the keyboard data.
 		// Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
 		glfwPollEvents();
-		if (glfwGetWindowAttrib(glfwWindow, GLFW_ICONIFIED) != 0)
-		{
-			ImGui_ImplGlfw_Sleep(32);
-			continue;
-		}
 
 		GenericFrame(glfwWindow);
 
 		ImGuiFrame(glfwWindow);
 
 		glfwSwapBuffers(glfwWindow);
+
+		if (glfwGetWindowAttrib(glfwWindow, GLFW_ICONIFIED) != 0) {
+			ImGui_ImplGlfw_Sleep(32);
+			continue;
+		}
 	}
 
 	if(shaderProgram != 0) {

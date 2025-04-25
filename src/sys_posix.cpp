@@ -9,9 +9,14 @@
 #include <sys/stat.h>
 #include <sys/mman.h> // mmap()
 #include <unistd.h> // close()
+#include <limits.h> // PATH_MAX
 
 #include <stdio.h>
 #include <string.h>
+
+#ifdef __APPLE__
+extern "C" const char* getAppSupportDirectory(const char* subdir);
+#endif
 
 namespace texview {
 
@@ -66,7 +71,7 @@ MemMappedFile* LoadMemMappedFile(const char* filename)
 		return nullptr;
 	}
 	if(st.st_size <= 0) {
-		errprintf("Can't load '%s', stat reports invalid size %ld!\n", filename, st.st_size);
+		errprintf("Can't load '%s', stat reports invalid size %ld!\n", filename, (long)st.st_size);
 		close(fd);
 		return nullptr;
 	}
@@ -96,6 +101,60 @@ void UnloadMemMappedFile(MemMappedFile* mmf)
 		close(mmf->fd);
 	}
 	delete mmf;
+}
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
+bool CreatePathRecursive(char* path)
+{
+	bool dirExists = false;
+	struct stat buf = {};
+	if(stat(path, &buf) == 0) {
+		dirExists = (buf.st_mode & S_IFMT) == S_IFDIR;
+	}
+
+	if(!dirExists) {
+		char* lastDirSep = strrchr(path, '/');
+		if(lastDirSep != NULL) {
+			*lastDirSep = '\0'; // cut off last part of the path and try first with parent directory
+			bool ok = CreatePathRecursive(path);
+			*lastDirSep = '/'; // restore path
+			// if parent dir was successfully created (or already existed), create this dir
+			if(ok && mkdir(path, 0755) == 0) {
+				return true;
+			}
+		}
+		return false;
+	}
+	return true;
+}
+
+const char* GetSettingsDir()
+{
+	static char path[PATH_MAX] = {0};
+	if(path[0] != '\0') {
+		return path;
+	}
+
+#ifdef __APPLE__
+	const char* sd = getAppSupportDirectory("texview");
+	if(sd != nullptr) {
+		size_t l = strlen(sd);
+		if(l < PATH_MAX) {
+			memcpy(path, sd, l+1);
+		}
+	}
+#else
+	const char* xdg_cfg = getenv("XDG_CONFIG_HOME");
+	if(xdg_cfg != nullptr) {
+		snprintf(path, sizeof(path), "%s/texview", xdg_cfg);
+	} else {
+		snprintf(path, sizeof(path), "%s/.config/texview", getenv("HOME"));
+	}
+#endif
+	return path;
 }
 
 } //namespace texview

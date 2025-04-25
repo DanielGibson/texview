@@ -285,12 +285,12 @@ const char* Texture::GetIntTexInfo(bool& isUnsigned)
 	if(!isInt) {
 		return nullptr;
 	}
-	const char* ret = "256.0";
+	const char* ret = "255.0";
 	isUnsigned = false;
 	switch(glType) {
 		case GL_UNSIGNED_BYTE:
 			isUnsigned = true;
-			ret = "256.0";
+			ret = "255.0";
 			break;
 		case GL_UNSIGNED_SHORT:
 			isUnsigned = true;
@@ -458,7 +458,13 @@ bool Texture::LoadKTX(MemMappedFile* mmf, const char* filename)
 	}
 
 	if(ktxTexture_NeedsTranscoding(ktxTex)) {
-		res = ktxTexture2_TranscodeBasis(ktxTex2, KTX_TTF_BC7_RGBA, 0);
+		ktx_transcode_fmt_e transCodeTarget = KTX_TTF_RGBA32; // fall back to uncompressed RGBA
+		if(GLAD_GL_KHR_texture_compression_astc_ldr) {
+			transCodeTarget = KTX_TTF_ASTC_4x4_RGBA;
+		} else if(GLAD_GL_ARB_texture_compression_bptc) {
+			transCodeTarget = KTX_TTF_BC7_RGBA;
+		}
+		res = ktxTexture2_TranscodeBasis(ktxTex2, transCodeTarget, 0);
 		if(res != KTX_SUCCESS) {
 			errprintf("libktx couldn't transcode '%s': %s (%d)\n", filename, ktxErrorString(res), res);
 			ktxTexture_Destroy(ktxTex);
@@ -845,8 +851,6 @@ const UncomprFormatInfo uncomprFormatTable[] = {
 	{ D3DFMT_D16,
 	     DXGI_FORMAT_D16_UNORM,     GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT,  16, "Depth16 UNORM" },
 	{ 0, DXGI_FORMAT_R16_UNORM,             GL_RED,        GL_RED,          GL_UNSIGNED_SHORT,  16, "Red16 UNORM" },
-	// TODO: gli/data/kueken7_r16_unorm.dds (which is really UINT) is black
-	// FIXME: apparently for (all?) _INTEGER formats one needs to use a sized type as internal format
 	{ D3DFMT_INDEX16,
 	     DXGI_FORMAT_R16_UINT,              GL_R16UI,      GL_RED_INTEGER,  GL_UNSIGNED_SHORT,  16, "Red16 UINT" },
 	{ 0, DXGI_FORMAT_R16_SNORM,             GL_RED,        GL_RED,          GL_SHORT,           16, "Red16 SNORM" },
@@ -854,8 +858,6 @@ const UncomprFormatInfo uncomprFormatTable[] = {
 
 	{ 0, DXGI_FORMAT_R8_TYPELESS,           GL_R8UI,       GL_RED_INTEGER,  GL_UNSIGNED_BYTE,    8, "Red8 typeless", TF_TYPELESS },
 	{ 0, DXGI_FORMAT_R8_UNORM,              GL_RED,        GL_RED,          GL_UNSIGNED_BYTE,    8, "Red8 UNORM" },
-	// FIXME: looks like I have to use the sized internal formats after all? at least for some formats?
-	// FIXME gli/data/kueken7_r8_uint.dds and kueken7_r8_sint.dds do load, but are black
 	{ 0, DXGI_FORMAT_R8_UINT,               GL_R8UI,       GL_RED_INTEGER,  GL_UNSIGNED_BYTE,    8, "Red8 UINT" },
 	{ 0, DXGI_FORMAT_R8_SNORM,              GL_RED,        GL_RED,          GL_BYTE,             8, "Red8 SNORM" },
 	{ 0, DXGI_FORMAT_R8_SINT,               GL_R8I,        GL_RED_INTEGER,  GL_BYTE,             8, "Red8 SINT" },

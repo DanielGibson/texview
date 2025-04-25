@@ -110,6 +110,7 @@ else()
 endif()
 
 set (texview_src
+	logging.cpp
 	main.cpp
 	texload.cpp
 	texview.h)
@@ -118,6 +119,10 @@ if(WIN32)
 	set(texview_src ${texview_src} sys_win.cpp)
 else() # the two genders: Win32 and POSIX
 	set(texview_src ${texview_src} sys_posix.cpp)
+endif()
+
+if(APPLE)
+	set(texview_src ${texview_src} msputils.m)
 endif()
 
 set (add_lib_src
