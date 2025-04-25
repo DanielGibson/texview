@@ -66,7 +66,7 @@ MemMappedFile* LoadMemMappedFile(const char* filename)
 		return nullptr;
 	}
 	if(st.st_size <= 0) {
-		errprintf("Can't load '%s', stat reports invalid size %ld!\n", filename, st.st_size);
+		errprintf("Can't load '%s', stat reports invalid size %ld!\n", filename, (long)st.st_size);
 		close(fd);
 		return nullptr;
 	}

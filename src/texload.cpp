@@ -458,7 +458,13 @@ bool Texture::LoadKTX(MemMappedFile* mmf, const char* filename)
 	}
 
 	if(ktxTexture_NeedsTranscoding(ktxTex)) {
-		res = ktxTexture2_TranscodeBasis(ktxTex2, KTX_TTF_BC7_RGBA, 0);
+		ktx_transcode_fmt_e transCodeTarget = KTX_TTF_RGBA32; // fall back to uncompressed RGBA
+		if(GLAD_GL_KHR_texture_compression_astc_ldr) {
+			transCodeTarget = KTX_TTF_ASTC_4x4_RGBA;
+		} else if(GLAD_GL_ARB_texture_compression_bptc) {
+			transCodeTarget = KTX_TTF_BC7_RGBA;
+		}
+		res = ktxTexture2_TranscodeBasis(ktxTex2, transCodeTarget, 0);
 		if(res != KTX_SUCCESS) {
 			errprintf("libktx couldn't transcode '%s': %s (%d)\n", filename, ktxErrorString(res), res);
 			ktxTexture_Destroy(ktxTex);

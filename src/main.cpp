@@ -823,7 +823,6 @@ static void DrawTexture()
 			float posY = 0.0f;
 			float hOffset = texW + spacingBetweenMips;
 			float vOffset = texH + spacingBetweenMips;
-			int rowNum = 0;
 			for(int i=0; i < numMips; ++i) {
 				AddQuad(tex, i, arrayIndex, ImVec2(posX, posY), ImVec2(texW, texH));
 				if(((i+1) % numHor) == 0) {
@@ -832,7 +831,6 @@ static void DrawTexture()
 					// so the next level of the last mip of one line
 					// is right below it instead of the start of the next line
 					hOffset = -hOffset;
-					++rowNum;
 				} else {
 					posX += hOffset;
 				}
@@ -926,18 +924,6 @@ static void GenericFrame(GLFWwindow* window)
 
 	glUseProgram(shaderProgram);
 
-#if 0
-	// good thing we're using a compat profile :-p
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	glViewport(xOffs, 0, winW, display_h);
-	glOrtho(0, winW, display_h, 0, -1, 1);
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
-
-	glScaled(zoomLevel, zoomLevel, 1);
-	glTranslated((transX * sx) / zoomLevel, (transY * sy) / zoomLevel, 0.0);
-#else
 	float mvp[4][4] = {};
 	glViewport(xOffs, 0, winW, display_h);
 
@@ -965,7 +951,6 @@ static void GenericFrame(GLFWwindow* window)
 	}
 
 	glUniformMatrix4fv(mvpMatrixUniform, 1, GL_FALSE, mvp[0]);
-#endif
 
 	DrawTexture();
 }
