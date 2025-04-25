@@ -296,6 +296,13 @@ extern void LogPrint(const char* fmt, ...) IM_FMTARGS(1);
 extern void StringAppendFormatted(std::string& str, const char* fmt, ...)  IM_FMTARGS(2);
 extern void StringAppendFormattedV(std::string& str, const char* fmt, va_list args) IM_FMTLIST(2);
 
+extern const char* GetSettingsDir();
+
+// NOTE: path must be writable.
+// It will be modified while the function is running,
+// but restored to its original state before it returns
+extern bool CreatePathRecursive(char* path);
+
 } //namespace texview
 
 #endif // _TEXVIEW_H

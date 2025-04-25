@@ -143,6 +143,19 @@ void UnloadMemMappedFile(MemMappedFile* mmf)
 	}
 }
 
+const char* GetSettingsDir()
+{
+	// TODO: something with SHGetFolderPathW() and CSIDL_APPDATA
+	// return UTF-8, we use that everywhere and thankfully so does ImGui
+	return ".";
+}
+
+bool CreatePathRecursive(char* path)
+{
+	// TODO: implement
+	return true;
+}
+
 } //namespace texview
 
 // For WinMain() I stole some code from SDL_main/SDL_RunApp() to convert
