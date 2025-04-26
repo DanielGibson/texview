@@ -8,7 +8,8 @@
  * zlib license, see below and/or Licenses.txt
  */
 
-#include "windows.h"
+#include <windows.h>
+#include <Shlobj.h>
 
 #include "texview.h"
 
@@ -143,17 +144,72 @@ void UnloadMemMappedFile(MemMappedFile* mmf)
 	}
 }
 
+// returns something like C:\Users\Horst\AppData\Roaming\texview (in UTF-8)
 const char* GetSettingsDir()
 {
-	// TODO: something with SHGetFolderPathW() and CSIDL_APPDATA
-	// return UTF-8, we use that everywhere and thankfully so does ImGui
-	return ".";
+	static char settingsDir[1024] = {0}; // much more than MAX_PATH (260), but UTF8 may need more chars..
+	if (settingsDir[0] != '\0')
+		return settingsDir;
+
+	WCHAR appdataPath[MAX_PATH] = { 0 };
+	// get path of users AppData/ dir (e.g. C:\Users\Horst\AppData\Roaming)
+	// TODO: Roaming or Local? Local should be CSIDL_LOCAL_APPDATA
+	HRESULT res = SHGetFolderPathW(nullptr, CSIDL_APPDATA | CSIDL_FLAG_CREATE,
+	                               nullptr, SHGFP_TYPE_CURRENT, appdataPath);
+	if (res != S_OK) {
+		LogError("Couldn't get your AppData directory - will save settings in the current directory!\n");
+		// TODO: could get more info with FormatMessage()
+		settingsDir[0] = '.';
+		return settingsDir;
+	}
+
+	// convert to UTF-8, because we (and ImGui) use UTF-8 everywhere
+	char* adpu8 = Utf16ToUtf8(appdataPath);
+	snprintf(settingsDir, sizeof(settingsDir), "%s\\texview", adpu8);
+	free(adpu8);
+
+	return settingsDir;
+}
+
+static WCHAR* findLastDirSep(WCHAR* str)
+{
+	WCHAR* lastBS = wcsrchr(str, L'\\');
+	WCHAR* lastSlash = wcsrchr(str, L'/');
+	if (lastBS == nullptr) {
+		return lastSlash;
+	}
+	return (lastSlash == nullptr || lastSlash < lastBS) ? lastBS : lastSlash;
+}
+
+static bool CreatePathRecursiveW(WCHAR* path)
+{
+	bool dirExists = false;
+	struct _stat buf = {};
+	if (_wstat(path, &buf) == 0) {
+		dirExists = (buf.st_mode & S_IFMT) == S_IFDIR;
+	}
+	if (!dirExists) {
+		WCHAR* lastDirSep = findLastDirSep(path);
+		if (lastDirSep != nullptr) {
+			WCHAR dsbk = *lastDirSep;
+			*lastDirSep = 0; // cut off last part of the path and try first with parent directory
+			bool ok = CreatePathRecursiveW(path);
+			*lastDirSep = dsbk; // restore path
+			if (ok && CreateDirectoryW(path, NULL)) {
+				return true;
+			}
+		}
+		return false;
+	}
+	return true;
 }
 
 bool CreatePathRecursive(char* path)
 {
-	// TODO: implement
-	return true;
+	WCHAR* pathW = Utf8ToUtf16(path);
+	bool ret = CreatePathRecursiveW(pathW);
+	free(pathW);
+	return ret;
 }
 
 } //namespace texview
