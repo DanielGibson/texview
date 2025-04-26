@@ -106,6 +106,12 @@ struct TexviewAppLog
 
 		ImGui::Separator();
 
+		// DG: allow closing with Escape
+		if(p_open != nullptr && ImGui::IsWindowFocused()
+		   && ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+			*p_open = false;
+		}
+
 		// DG: no horizontal scrolling
 		if (ImGui::BeginChild("scrolling", ImVec2(0, 0), ImGuiChildFlags_None, 0)) // ImGuiWindowFlags_HorizontalScrollbar
 		{
@@ -171,12 +177,6 @@ struct TexviewAppLog
 			// Using a scrollbar or mouse-wheel will take away from the bottom edge.
 			if (AutoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
 				ImGui::SetScrollHereY(1.0f);
-
-			// DG: allow closing with Escape
-			if(p_open != nullptr && ImGui::IsWindowFocused()
-			   && ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-				*p_open = false;
-			}
 		}
 		ImGui::EndChild();
 		ImGui::End();
