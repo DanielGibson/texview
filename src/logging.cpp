@@ -19,7 +19,7 @@ namespace texview {
 
 // how much we scale the font used by ImGui (*not* including the scaling ImGui
 // does automatically, if any) - for UpdateWarningOverlay()
-float imguiFontScale = 1.0f;
+float imguiAdditionalScale = 1.0f;
 
 void ShowWarningOverlay( const char* text, bool isError );
 
@@ -353,7 +353,7 @@ static void UpdateWarningOverlay()
 		{20, 33} // dot
 	};
 
-	float iconScale = imguiFontScale;
+	float iconScale = imguiAdditionalScale;
 
 	ImVec2 offset = ImGui::GetWindowPos() + ImVec2(fontSize, fontSize);
 	for(ImVec2& v : points) {
@@ -396,8 +396,14 @@ void ShowWarningOverlay( const char* text, bool isError )
 void DrawLogWindow() {
 	UpdateWarningOverlay();
 	if(showLogWindow) {
+		ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+		ImVec2 winSize(displaySize.x - 260*imguiAdditionalScale,
+		               std::min(256*imguiAdditionalScale, displaySize.y));
+		ImVec2 winPos = displaySize - winSize;
+		ImGui::SetNextWindowSize(winSize, ImGuiCond_Once);
+		ImGui::SetNextWindowPos(winPos, ImGuiCond_Once);
+
 #if 0 // just for testing..
-		ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_FirstUseEver);
 		ImGui::Begin("Log Messages", &showLogWindow);
 
 		if (ImGui::SmallButton("[Debug] Add 5 entries"))
