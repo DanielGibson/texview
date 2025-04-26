@@ -1036,6 +1036,8 @@ static void DrawGLSLeditWindow(GLFWwindow* window)
 {
 	ImGuiIO& io = ImGui::GetIO();
 
+	ImVec2 winSize(440*texview::imguiAdditionalScale, 0);
+	ImGui::SetNextWindowSize(winSize, ImGuiCond_Appearing);
 	ImGui::SetNextWindowPos( ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f),
 	                         ImGuiCond_Once, ImVec2(0.5f, 0.5f) );
 
@@ -1340,10 +1342,6 @@ static void SetImGuiStyle()
 	style.PopupRounding = 2.0f;
 }
 
-namespace texview {
-extern float imguiFontScale;
-}
-
 static void UpdateFontsAndScaling(GLFWwindow* window)
 {
 	/* This here is about scaling sizes of ImGui fonts and styling parameters,
@@ -1427,7 +1425,7 @@ static void UpdateFontsAndScaling(GLFWwindow* window)
 	//  devices can have different horizontal and vertical pixels-per-inch values.
 	//  I think some smartphones actually do this?)
 	float ourImguiScale = std::max(sx, sy);
-	texview::imguiFontScale = ourImguiScale;
+	texview::imguiAdditionalScale = ourImguiScale;
 
 	ImFontConfig fontCfg = {};
 	strcpy(fontCfg.Name, "ProggyVector");

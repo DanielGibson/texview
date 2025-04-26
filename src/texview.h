@@ -275,6 +275,10 @@ private:
 	bool UploadTexture3Dslice(uint32_t target, int internalFormat, int level, int elemIdx, bool isCompressed, const Texture::MipLevel& mipLevel);
 };
 
+// how much we scale the font used by ImGui (*not* including the scaling ImGui
+// does automatically, if any) - for UpdateWarningOverlay()
+extern float imguiAdditionalScale;
+
 enum LogLevel {
 	LL_INFO,
 	LL_WARN,
