@@ -15,6 +15,9 @@ A more unusual feature is that you can **swizzle** the color channels or even ed
 code used to display the texture, which can be useful for normalmaps in optimized encodings, for example,
 or to be able to view images whichs alpha-channel (for whatever reason) is `0` (just set Swizzle to `rgb1`).
 
+This currently works on **Linux, Windows** and **macOS**.  
+Probably also FreeBSD, OpenBSD and other Unix-likes (but that's untested).
+
 Contributions are welcome, but maybe ping me first so we don't accidentally implement the same thing twice :)
 
 Project page: https://github.com/DanielGibson/texview
@@ -43,7 +46,7 @@ for example "texview-win64-120eeaa".
 - [x] Show some basic info (format, encoding, size, ...)
 - [ ] Implement filters for filepicker so it only shows supported formats
 - [x] Support selecting mipmap level for display
-- [ ] Show errors/warnings with ImGui instead of only printing to stderr
+- [x] Show errors/warnings with ImGui instead of only printing to stderr
 - [x] Zooming in/out, dragging the texture around the window
 - [x] Support selecting linear and nearest filtering
 - [x] Support showing all mipmap levels at once
