@@ -22,7 +22,7 @@ Contributions are welcome, but maybe ping me first so we don't accidentally impl
 
 Project page: https://github.com/DanielGibson/texview
 
-Download the latest release at https://github.com/DanielGibson/texview/releases/latest
+**Download** the latest release at https://github.com/DanielGibson/texview/releases/latest
 
 Or download Windows and Linux *test binaries* from automated builds at https://github.com/DanielGibson/texview/actions  
 Downloading automated test builds REQUIRES YOU TO BE LOGGED INTO GITHUB!  
@@ -59,6 +59,8 @@ for example "texview-win64-120eeaa".
           mipmapping (with different anisotropic filtering levels) in action
 - [x] Let user set swizzling of color channels (and maybe swizzle automatically for known swizzled formats like "RXGB" DXT5)
     - need to use shaders for this.. but that's also needed for texture arrays
+- [ ] Save background color and maybe other settings (maybe to imgui.ini?)
+- [ ] Optional checkerbox pattern background
 - [ ] Maybe different texture files next to each other (for example to compare quality of encoders)
 - [ ] List of textures in current directory to easily select another one
     - [ ] If one can also navigate to `..` and subdirectories here, it could even be a full alternative to the filepicker

@@ -175,10 +175,10 @@ static WCHAR* findLastDirSep(WCHAR* str)
 {
 	WCHAR* lastBS = wcsrchr(str, L'\\');
 	WCHAR* lastSlash = wcsrchr(str, L'/');
-	if (lastBS == nullptr) {
-		return lastSlash;
+	if(lastBS != nullptr && (lastSlash == nullptr || lastSlash < lastBS)) {
+		return lastBS;
 	}
-	return (lastSlash == nullptr || lastSlash < lastBS) ? lastBS : lastSlash;
+	return lastSlash;
 }
 
 static bool CreatePathRecursiveW(WCHAR* path)
@@ -243,7 +243,7 @@ misrepresented as being the original software.
 extern int my_main(int argc, char** argv);
 
 /* Pop up an out of memory message, returns to Windows */
-static BOOL OutOfMemory(void)
+static int OutOfMemory(void)
 {
 	MessageBoxA(NULL, "Out of memory - aborting", "Fatal Error", MB_ICONERROR);
 	return -1;
@@ -252,7 +252,7 @@ static BOOL OutOfMemory(void)
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR szCmdLine, int sw)
 {
 	/* Gets the arguments with GetCommandLine, converts them to argc and argv
-	and calls SDL_main */
+	and calls my_main */
 
 	LPWSTR *argvw;
 	char **argv;

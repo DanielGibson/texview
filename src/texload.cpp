@@ -426,7 +426,7 @@ bool Texture::Load(const char* filename)
 
 		return true;
 	} else {
-		formatName = nullptr;
+		formatName.clear();
 		glType = 0;
 	}
 

@@ -657,6 +657,9 @@ static void AddCubeQuad(texview::Texture& texture, int mipLevel, int faceIndex, 
 			case FI_ZNEG:
 				tmp = vec4( -mc.x, -mc.y, -1.0f );
 				break;
+			default: // should really not happen, but make compiler happy
+				assert(0 && "invalid faceIndex");
+				tmp = mc;
 		}
 		mc = tmp;
 		mc.w = arrayIndex;
