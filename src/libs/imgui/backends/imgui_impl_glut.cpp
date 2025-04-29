@@ -13,6 +13,7 @@
 //  [ ] Platform: Missing mouse cursor shape/visibility support.
 //  [ ] Platform: Missing clipboard support (not supported by Glut).
 //  [ ] Platform: Missing gamepad support.
+//  [ ] Platform: Missing multi-viewport support (multiple windows).
 
 // You can use unmodified imgui_impl_* files in your project. See examples/ folder for examples of using this.
 // Prefer including the entire imgui/ repository into your project (either as a copy or as a submodule), and only build the backends you need.
@@ -50,7 +51,7 @@
 
 static int g_Time = 0;          // Current time, in milliseconds
 
-// Glut has 1 function for characters and one for "special keys". We map the characters in the 0..255 range and the keys above.
+// Glut has one function for characters and one for "special keys". We map the characters in the 0..255 range and the keys above.
 static ImGuiKey ImGui_ImplGLUT_KeyToImGuiKey(int key)
 {
     switch (key)
