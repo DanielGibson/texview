@@ -1086,14 +1086,15 @@ static void DrawGLSLeditWindow(GLFWwindow* window)
 
 static void DrawSidebar(GLFWwindow* window)
 {
-	ImGuiIO& io = ImGui::GetIO();
 
-	ImGui::SetNextWindowPos( ImVec2(0, 0), ImGuiCond_Appearing );
+	ImGuiViewport* mainViewPort = ImGui::GetMainViewport();
+	// NOTE: in ImGui's docking branch, positions are in global (screen/OS) coordinates
+	ImGui::SetNextWindowPos(mainViewPort->Pos, ImGuiCond_Always);
 	if(!imguiMenuCollapsed) {
-		ImGui::SetNextWindowSize(ImVec2(0, io.DisplaySize.y), ImGuiCond_Always);
+		ImGui::SetNextWindowSize(ImVec2(0, mainViewPort->Size.y), ImGuiCond_Always);
 	}
 
-	ImGuiWindowFlags flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
+	ImGuiWindowFlags flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize;
 	if(ImGui::Begin("##options", NULL, flags)) {
 		const ImGuiStyle& style = ImGui::GetStyle();
 		if(ImGui::Button("Open File")) {
@@ -1503,6 +1504,17 @@ static void ImGuiFrame(GLFWwindow* window)
 
 	ImGui::Render();
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+	// Update and Render additional Platform Windows
+	// (Platform functions may change the current OpenGL context, so we save/restore it to make it easier to paste this code elsewhere.
+	//  For this specific demo app we could also call glfwMakeContextCurrent(window) directly)
+	if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+	{
+		GLFWwindow* backup_current_context = glfwGetCurrentContext();
+		ImGui::UpdatePlatformWindows();
+		ImGui::RenderPlatformWindowsDefault();
+		glfwMakeContextCurrent(backup_current_context);
+	}
 }
 
 static double CalcZoomLevel(double zl, bool increase)
@@ -1727,6 +1739,11 @@ int main(int argc, char** argv)
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+	// things for docking/multi viewport
+	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+	//io.ConfigViewportsNoAutoMerge = true;
+	//io.ConfigViewportsNoTaskBarIcon = true;
 
 
 	imguiIniPath += "/imgui.ini";
