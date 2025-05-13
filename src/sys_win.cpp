@@ -9,7 +9,8 @@
  */
 
 #include <windows.h>
-#include <Shlobj.h>
+#include <shlobj.h>
+#include <sys/stat.h>
 
 #include "texview.h"
 
