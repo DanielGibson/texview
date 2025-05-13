@@ -107,7 +107,11 @@ or generate a VS solution and build that, or use ninja, or whatever.
       `xdg-desktop-portal` version >= 1.7.1, **at runtime**.  
       See also https://github.com/btzy/nativefiledialog-extended/#using-xdg-desktop-portal-on-linux
 
-On **Windows** it just needs a recent Visual Studio version (I tested VS2022, but probably >= VS2015 works).
+On **Windows** it just needs CMake and a recent Visual Studio version (I tested VS2022, but
+probably >= VS2015 works) or mingw-w64.
+
+On **macOS**, CMake and XCode should suffice (like on Windows, only standard system libraries are
+used that are provided by default).
 
 ## License:
 
